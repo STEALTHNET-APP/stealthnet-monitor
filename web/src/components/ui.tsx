@@ -204,6 +204,7 @@ export function Stat({
   color?: string;
   spark?: boolean;
 }) {
+  const { demo } = useStore();
   return (
     <div className="stat panel">
       <div className="stat-icon" style={{ color }}>
@@ -216,7 +217,7 @@ export function Stat({
           <small style={{ color: color || "var(--mint)" }}>{note}</small>
         )}
       </div>
-      {spark && <Spark color={color} />}
+      {spark && demo && <Spark color={color} />}
     </div>
   );
 }

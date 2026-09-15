@@ -10,6 +10,7 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY scripts/install-agent.sh ./scripts/install-agent.sh
+COPY scripts/xray_collector.py ./scripts/xray_collector.py
 RUN cargo build --release --locked -j 1 --workspace
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* && useradd --system --uid 10001 --home /data stealthnet

@@ -36,6 +36,7 @@ export function Overview() {
   const activeIncidents = data.incidents.filter((r) => r.status !== "resolved");
   const online = data.nodes.filter((n) => n.status === "online").length;
   const users = data.nodes.reduce((s, n) => s + (n.users || 0), 0);
+  const hasUsers = data.nodes.some((n) => n.users != null);
   const speed = data.nodes.reduce((s, n) => s + (n.rx || 0) + (n.tx || 0), 0);
   return (
     <>
@@ -59,8 +60,8 @@ export function Overview() {
         <Stat
           icon={<Users />}
           label="Пользователи онлайн"
-          value={demo ? fmt(users) : "—"}
-          note={demo ? "+8,4% за сутки" : "Ожидает Remnawave"}
+          value={hasUsers ? fmt(users) : "—"}
+          note={demo ? "+8,4% за сутки" : hasUsers ? "Remnawave · сумма по нодам" : "Нет данных Remnawave"}
         />
         <Stat
           icon={<Gauge />}
@@ -96,7 +97,7 @@ export function Overview() {
             <h3>Пользователи онлайн</h3>
             <b>
               <Users size={16} />
-              {demo ? fmt(users) : "—"}
+              {hasUsers ? fmt(users) : "—"}
             </b>
           </div>
           <Chart kind="users" height={100} compact />
@@ -273,7 +274,7 @@ export function MapPage() {
             />
             <span>
               <Users size={19} />
-              {demo
+              {data.nodes.some((n) => n.users != null)
                 ? fmt(data.nodes.reduce((s, n) => s + (n.users || 0), 0))
                 : "—"}{" "}
               онлайн

@@ -19,6 +19,10 @@ pub async fn evaluate(app: &App) -> anyhow::Result<()> {
                 evaluate_expiry(app, &node, &rule).await?;
                 continue;
             }
+            // Agent resource rules apply only after an agent has been installed.
+            if node["source"] == "remnawave" {
+                continue;
+            }
             let metric = match rule.metric.as_str() {
                 "offline" => Some((now() - raw_seen) as f64 / 1000.),
                 "traffic" => node["rx"]

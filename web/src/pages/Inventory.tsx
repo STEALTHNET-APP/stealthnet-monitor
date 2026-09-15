@@ -527,12 +527,18 @@ export const userColumns: Column<Row & { id: string }>[] = [
     render: (r) => datetime(r.last_seen),
   },
 ];
+function ConnectionUser({ value }: { value: Row["user"] }) {
+  const { data } = useStore();
+  const user = data.users.find((u) => u.id === value || u.name === value || (u.remna_id != null && String(u.remna_id) === String(value)));
+  return user ? <Link to={"/users/" + user.id}>{user.name}</Link> : <span title="Идентификатор пользователя из журнала Xray">{String(value || "Не определён")}</span>;
+}
 const connectionColumns: Column<Row & { id: string }>[] = [
-  { key: "user", title: "Пользователь" },
+  { key: "user", title: "Пользователь", render: (r) => <ConnectionUser value={r.user} /> },
   { key: "node", title: "Нода" },
   { key: "ip", title: "Наблюдаемый IP" },
   { key: "region", title: "Регион" },
   { key: "protocol", title: "Протокол" },
+  { key: "last_seen", title: "Последняя активность", render: (r) => datetime(r.last_seen || r.time) },
   { key: "duration", title: "Длительность" },
   { key: "traffic", title: "Трафик, МБ", sort: (r) => Number(r.traffic) },
 ];
@@ -806,7 +812,7 @@ export function NodeDetail() {
       <div className="node-status-line">
         <Flag code={node.code} />
         <Badge status={node.status} />
-        <span>Агент {node.agent}</span>
+        <span>{node.source === "remnawave" ? "Remnawave · агент не установлен" : `Агент ${node.agent}`}</span>
         <span className="muted">Данные: {datetime(node.last_seen)}</span>
       </div>
       <Tabs
@@ -821,6 +827,10 @@ export function NodeDetail() {
         value={tab}
         onChange={setTab}
       />
+      {node.source === "remnawave" && <div className="notice-box">
+        <p>Нода загружена из Remnawave. Для CPU, памяти, трафика и журнала подключений установите агент.</p>
+        <Link className="button" to={"/add-server?" + new URLSearchParams({name: node.name, address: node.ip, region: "xx"}).toString()}>Установить агент</Link>
+      </div>}
       {tab === "Хостер и аренда" ? (
         <BillingEditor node={node} />
       ) : ["Обзор", "Метрики"].includes(tab) ? (
@@ -875,7 +885,7 @@ export function NodeDetail() {
                   ))}
                 </dl>
               </Panel>
-              <Panel title="Расположение">
+              <Panel title="Расположение" sub={node.location_source}>
                 <NodeMap
                   world
                   nodes={[node]}
@@ -891,7 +901,7 @@ export function NodeDetail() {
           <Table
             columns={connectionColumns}
             rows={
-              data.connections.filter((r) => r.node === node.name) as (Row & {
+              data.connections.filter((r) => r.node_id === node.id || r.node === node.name) as (Row & {
                 id: string;
               })[]
             }
@@ -930,7 +940,7 @@ export function NodeDetail() {
             </div>
             <div>
               <dt>Источник</dt>
-              <dd>Исходящая телеметрия по HTTPS</dd>
+              <dd>{node.source === "remnawave" ? "Remnawave API · только чтение" : "Исходящая телеметрия по HTTPS"}</dd>
             </div>
           </dl>
           <p className="muted">

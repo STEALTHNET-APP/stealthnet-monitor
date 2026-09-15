@@ -1,5 +1,7 @@
 pub mod alerts;
 pub mod db;
+pub mod node_inventory;
+pub mod node_release;
 pub mod remnawave;
 pub mod secrets;
 pub mod telegram;
@@ -66,6 +68,7 @@ pub fn router(app: App, web: &str, downloads: &str) -> Router {
     let private = Router::new()
         .route("/snapshot", get(snapshot))
         .route("/enrollments", post(enroll))
+        .route("/node-image/latest", get(node_release::latest))
         .route("/enrollments/{id}", get(enrollment_status))
         .route("/nodes/{id}/billing", patch(billing_update))
         .route("/alert-rules/{id}", put(rule_save))
@@ -95,6 +98,15 @@ pub fn router(app: App, web: &str, downloads: &str) -> Router {
     Router::new()
         .nest("/api", api)
         .route(
+            "/xray-collector.py",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/x-python")],
+                    include_str!("../../../scripts/xray_collector.py"),
+                )
+            }),
+        )
+        .route(
             "/install-agent.sh",
             get(|| async {
                 (
@@ -107,7 +119,7 @@ pub fn router(app: App, web: &str, downloads: &str) -> Router {
         .fallback_service(tower_http::services::ServeDir::new(web).not_found_service(
             tower_http::services::ServeFile::new(format!("{web}/index.html")),
         ))
-        .layer(DefaultBodyLimit::max(262144))
+        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .layer(middleware::from_fn_with_state(app.clone(), same_origin))
         .layer(tower_http::compression::CompressionLayer::new())
         .with_state(app)
@@ -394,6 +406,20 @@ async fn telemetry(
         node["last_seen"] = json!(sample.time);
         node["agent"] = json!(sample.version);
         node["hostname"] = json!(sample.hostname);
+        node["addresses"] = json!(sample.addresses);
+        if node["ip"]
+            .as_str()
+            .is_none_or(|ip| ip.parse::<std::net::IpAddr>().is_err())
+        {
+            if let Some(ip) = sample
+                .addresses
+                .iter()
+                .find(|ip| ip.parse::<std::net::Ipv4Addr>().is_ok())
+                .or_else(|| sample.addresses.first())
+            {
+                node["ip"] = json!(ip);
+            }
+        }
         node["status"] = json!(
             if sample.cpu > 85. || sample.ram > 90. || sample.disk > 90. {
                 "warning"
@@ -412,7 +438,12 @@ async fn telemetry(
     if inserted {
         for e in &sample.events {
             let event_id = format!("{id}:{}", e.id);
-            let payload = json!({"id":event_id,"user":e.user.as_deref().unwrap_or("Не определён"),"ip":e.ip,"region":"Не определён","node":node["name"],"node_id":id,"protocol":if e.kind=="detection"{"BitTorrent"}else{"Не определён"},"evidence":e.evidence,"status":"new","time":e.time,"source":"Агент · структурированный журнал","confidence":"Сигнал"});
+            let payload = json!({"id":event_id,"user":e.user.as_deref().unwrap_or("Не определён"),"ip":e.ip,"region":"Не определён","node":node["name"],"node_id":id,"protocol":if e.kind=="detection"{"BitTorrent"}else{e.protocol.as_deref().unwrap_or("Не определён")},"evidence":e.evidence,"status":"new","time":e.time,"last_seen":e.time,"source":"Агент · журнал подключений","confidence":"Сигнал"});
+            if e.kind == "connection" {
+                sqlx::query("INSERT INTO records(kind,id,payload,time) VALUES($1,$2,$3,$4) ON CONFLICT(kind,id) DO UPDATE SET payload=excluded.payload,time=excluded.time WHERE records.time<excluded.time")
+                    .bind(&e.kind).bind(&event_id).bind(payload.to_string()).bind(e.time).execute(&app.db).await?;
+                continue;
+            }
             let inserted=sqlx::query("INSERT INTO records(kind,id,payload,time) VALUES($1,$2,$3,$4) ON CONFLICT(kind,id) DO NOTHING").bind(&e.kind).bind(&event_id).bind(payload.to_string()).bind(e.time).execute(&app.db).await?.rows_affected()>0;
             if inserted && e.kind == "detection" {
                 alerts::event(
@@ -698,11 +729,10 @@ async fn billing_update(
     Json(body): Json<stealthnet_core::Billing>,
 ) -> Result<Json<Value>> {
     body.validate().map_err(Error::bad)?;
-    if sqlx::query("SELECT id FROM nodes WHERE id=$1")
-        .bind(&id)
-        .fetch_optional(&app.db)
+    if !db::nodes(&app.db)
         .await?
-        .is_none()
+        .iter()
+        .any(|node| node["id"] == id)
     {
         return Err(Error(StatusCode::NOT_FOUND, "Сервер не найден".into()));
     }

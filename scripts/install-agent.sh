@@ -57,6 +57,55 @@ PY
 getent passwd stealthnet-agent >/dev/null || useradd --system --home /var/lib/stealthnet-monitor-agent --shell /usr/sbin/nologin stealthnet-agent
 install -d -o stealthnet-agent -g stealthnet-agent -m 700 /var/lib/stealthnet-monitor-agent
 chown -R stealthnet-agent:stealthnet-agent /etc/stealthnet-monitor
+if command -v docker >/dev/null && docker --host unix:///var/run/docker.sock info >/dev/null 2>&1 && [[ -z "$EVENT_FILE" ]]; then
+ # Discover exactly one official node container. These commands only inspect Docker state.
+ XRAY_CONTAINER=$(docker --host unix:///var/run/docker.sock ps --format '{{.Names}} {{.Image}}' | python3 -c 'import sys; rows=[line.split()[0] for line in sys.stdin if len(line.split())==2 and line.split()[1].startswith(("remnawave/node:","ghcr.io/remnawave/node:"))]; print(rows[0] if len(rows)==1 else "")')
+ if [[ "$XRAY_CONTAINER" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$ ]]; then
+  COLLECTOR_ENABLED=$(python3 - <<'PY'
+import json,pathlib
+c=json.loads(pathlib.Path('/etc/stealthnet-monitor/agent.json').read_text())
+print('yes' if not c.get('event_file') or c.get('event_file')=='/var/lib/stealthnet-monitor-xray/events.jsonl' else 'no')
+PY
+)
+  if [[ "$COLLECTOR_ENABLED" == yes ]]; then
+   install -d -m 755 /usr/local/lib/stealthnet-monitor
+   install -d -o root -g stealthnet-agent -m 750 /var/lib/stealthnet-monitor-xray
+   curl -fsSL --proto '=https' --tlsv1.2 "$PANEL/xray-collector.py" -o "$TMP_DIR/xray_collector.py"
+   install -o root -g root -m 644 "$TMP_DIR/xray_collector.py" /usr/local/lib/stealthnet-monitor/xray_collector.py
+   cat > /etc/systemd/system/stealthnet-monitor-xray.service <<UNIT
+[Unit]
+Description=Read existing Xray connection log for stealthnet-monitor
+After=docker.service
+[Service]
+User=root
+Group=stealthnet-agent
+Environment=DOCKER_CONFIG=/run/stealthnet-monitor-docker
+ExecStart=/usr/bin/python3 /usr/local/lib/stealthnet-monitor/xray_collector.py --container $XRAY_CONTAINER
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/stealthnet-monitor-xray
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=64M
+CPUQuota=5%
+[Install]
+WantedBy=multi-user.target
+UNIT
+   python3 - <<'PY'
+import json,pathlib
+p=pathlib.Path('/etc/stealthnet-monitor/agent.json');c=json.loads(p.read_text())
+c['event_file']='/var/lib/stealthnet-monitor-xray/events.jsonl'
+p.write_text(json.dumps(c));p.chmod(0o600)
+PY
+   systemctl daemon-reload
+   systemctl enable --now stealthnet-monitor-xray
+   systemctl restart stealthnet-monitor-xray
+  fi
+ fi
+fi
 install -m 755 "$TMP_DIR/$BINARY" /usr/local/bin/stealthnet-agent.new
 mv /usr/local/bin/stealthnet-agent.new /usr/local/bin/stealthnet-agent
 cat > /etc/systemd/system/stealthnet-monitor-agent.service <<'UNIT'

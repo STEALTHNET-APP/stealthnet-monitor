@@ -24,6 +24,7 @@ rollback:
 	bash scripts/rollback.sh
 test:
 	cargo test --workspace --locked
+	python3 -m unittest discover -s scripts/tests
 	node --test web/tests/metrics.test.ts
 	npm --prefix web run build
 	bash -n scripts/*.sh

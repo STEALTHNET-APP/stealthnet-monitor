@@ -75,8 +75,316 @@ fn sample(cpu: f64) -> Telemetry {
         tx_bytes_per_sec: 125000.,
         hostname: "test-node".into(),
         version: "0.1.0".into(),
+        addresses: vec![],
         events: vec![],
     }
+}
+#[tokio::test]
+async fn cyrillic_names_register_and_clean_nodes_keep_the_selected_image() {
+    let app = app().await;
+    let router = router(app.clone(), "web/dist", "dist/downloads");
+    let session = admin(&app).await;
+    for (name, mode) in [
+        ("Нидерланды".to_owned(), "existing"),
+        ("Я".repeat(80), "clean"),
+    ] {
+        let mut config = enrollment();
+        config["name"] = json!(name);
+        config["mode"] = json!(mode);
+        config["node_image"] = json!("remnawave/node:3.4.1");
+        config["node_secret"] = json!("a-synthetic-node-secret");
+        let (status, result) = request(
+            &router,
+            "POST",
+            "/api/enrollments",
+            config,
+            Some(&session),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{result}");
+        let token = result["command"]
+            .as_str()
+            .unwrap()
+            .split("--token '")
+            .nth(1)
+            .unwrap()
+            .split('\'')
+            .next()
+            .unwrap();
+        let (status, registered) = request(
+            &router,
+            "POST",
+            "/api/agent/register",
+            json!({"token": token}),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(registered["enrollment"]["name"], name);
+        assert_eq!(
+            registered["enrollment"]["node_image"],
+            "remnawave/node:3.4.1"
+        );
+        assert!(
+            db::nodes(&app.db)
+                .await
+                .unwrap()
+                .iter()
+                .any(|node| node["name"] == name)
+        );
+    }
+    for name in [
+        " ".into(),
+        "Я".repeat(81),
+        "node\nname".into(),
+        "$(command)".into(),
+    ] {
+        let mut config = enrollment();
+        config["name"] = json!(name);
+        assert_eq!(
+            request(
+                &router,
+                "POST",
+                "/api/enrollments",
+                config,
+                Some(&session),
+                None
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for image in [
+        "remnawave/node:",
+        "remnawave/node:latest",
+        "remnawave/node:3.4.1:other",
+        "other/node:3.4.1",
+    ] {
+        let mut config = enrollment();
+        config["mode"] = json!("clean");
+        config["node_secret"] = json!("a-synthetic-node-secret");
+        config["node_image"] = json!(image);
+        assert_eq!(
+            request(
+                &router,
+                "POST",
+                "/api/enrollments",
+                config,
+                Some(&session),
+                None
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
+#[tokio::test]
+async fn node_image_lookup_requires_login_and_reuses_recent_release() {
+    let app = app().await;
+    let cached = json!({"version":"3.4.1","image":"remnawave/node:3.4.1","release_url":"https://github.com/remnawave/node/releases/tag/3.4.1","checked_at":now()});
+    db::set_setting(&app.db, "remnawave_node_release", &cached.to_string())
+        .await
+        .unwrap();
+    let session = admin(&app).await;
+    let router = router(app, "web/dist", "dist/downloads");
+    assert_eq!(
+        request(
+            &router,
+            "GET",
+            "/api/node-image/latest",
+            Value::Null,
+            None,
+            None
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, release) = request(
+        &router,
+        "GET",
+        "/api/node-image/latest",
+        Value::Null,
+        Some(&session),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(release, cached);
+}
+
+#[tokio::test]
+async fn telemetry_auto_fills_ip_merges_remnawave_and_updates_connection_activity() {
+    let app = app().await;
+    let router = router(app.clone(), "web/dist", "dist/downloads");
+    let session = admin(&app).await;
+    let (_, enrollment) = request(
+        &router,
+        "POST",
+        "/api/enrollments",
+        enrollment(),
+        Some(&session),
+        None,
+    )
+    .await;
+    let token = enrollment["command"]
+        .as_str()
+        .unwrap()
+        .split("--token '")
+        .nth(1)
+        .unwrap()
+        .split('\'')
+        .next()
+        .unwrap();
+    let (_, registered) = request(
+        &router,
+        "POST",
+        "/api/agent/register",
+        json!({"token": token}),
+        None,
+        None,
+    )
+    .await;
+    let credential = registered["credential"].as_str().unwrap();
+    db::save_record(&app.db, "remna_node", "remna-nl", &json!({"id":"remna-nl","name":"Netherlands","address":"192.0.2.9","country_code":"NL","users_online":914,"is_connected":true}), now()).await.unwrap();
+    let mut telemetry = sample(11.);
+    telemetry.addresses = vec!["192.0.2.9".into()];
+    telemetry.events = vec![serde_json::from_value(json!({"id":"user-ip-tcp","time":now(),"kind":"connection","ip":"192.0.2.10","user":"12345","protocol":"TCP","evidence":"Xray: принятое подключение"})).unwrap()];
+    assert_eq!(
+        request(
+            &router,
+            "POST",
+            "/api/agent/telemetry",
+            serde_json::to_value(&telemetry).unwrap(),
+            None,
+            Some(credential)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let nodes = db::nodes(&app.db).await.unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0]["ip"], "192.0.2.9");
+    assert_eq!(nodes[0]["code"], "nl");
+    assert_eq!(nodes[0]["users"], 914);
+    telemetry.id = uuid::Uuid::new_v4().to_string();
+    telemetry.events[0].time += 1000;
+    assert_eq!(
+        request(
+            &router,
+            "POST",
+            "/api/agent/telemetry",
+            serde_json::to_value(&telemetry).unwrap(),
+            None,
+            Some(credential)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let connections = db::records(&app.db, "connection", 10).await.unwrap();
+    assert_eq!(connections.len(), 1);
+    assert_eq!(connections[0]["protocol"], "TCP");
+    assert_eq!(connections[0]["last_seen"], telemetry.events[0].time);
+    assert_eq!(connections[0]["node_id"], registered["node_id"]);
+}
+
+#[tokio::test]
+async fn remnawave_sync_only_reads_upstream_and_preserves_cache_on_partial_failure() {
+    use axum::{Json, extract::State};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use stealthnet_api::remnawave;
+    #[derive(Clone, Default)]
+    struct Upstream {
+        requests: Arc<Mutex<Vec<(String, String)>>>,
+        fail_page: Arc<AtomicBool>,
+    }
+    async fn reply(
+        State(state): State<Upstream>,
+        req: axum::extract::Request,
+    ) -> (StatusCode, Json<Value>) {
+        state
+            .requests
+            .lock()
+            .await
+            .push((req.method().to_string(), req.uri().to_string()));
+        let body = match (req.method().as_str(), req.uri().to_string().as_str()) {
+            ("GET", "/api/nodes") => json!({"response":[{"uuid":"node-1","name":"Test node"}]}),
+            ("GET", "/api/users?start=0&size=500") => {
+                json!({"response":{"users":(0..500).map(|i|json!({"uuid":format!("user-{i}"),"username":format!("client-{i}"),"status":"ACTIVE"})).collect::<Vec<_>>()}})
+            }
+            ("GET", "/api/users?start=500&size=500")
+                if !state.fail_page.load(Ordering::Relaxed) =>
+            {
+                json!({"response":{"users":[{"uuid":"user-500","username":"client-500","status":"ACTIVE"}]}})
+            }
+            ("GET", "/api/hwid/devices?start=0&size=500") => json!({"response":{"devices":[]}}),
+            _ => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error":"unexpected request or simulated page failure"})),
+                );
+            }
+        };
+        (StatusCode::OK, Json(body))
+    }
+    let upstream = Upstream::default();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let service = Router::new().fallback(reply).with_state(upstream.clone());
+    let task = tokio::spawn(async move { axum::serve(listener, service).await.unwrap() });
+    let app = app().await;
+    remnawave::save(
+        &app,
+        &remnawave::Config {
+            url,
+            token: "synthetic-api-token".into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    db::save_record(
+        &app.db,
+        "user",
+        "stale-local-copy",
+        &json!({"id":"stale-local-copy"}),
+        1,
+    )
+    .await
+    .unwrap();
+    let result = remnawave::sync(&app).await.unwrap();
+    assert_eq!(result["users"], 501);
+    let local_users = db::records(&app.db, "user", 1000).await.unwrap();
+    assert_eq!(local_users.len(), 501);
+    assert!(
+        !local_users
+            .iter()
+            .any(|user| user["id"] == "stale-local-copy")
+    );
+    // A failed later page must not delete users absent from the pages received so far.
+    upstream.fail_page.store(true, Ordering::Relaxed);
+    assert!(remnawave::sync(&app).await.is_err());
+    assert_eq!(db::records(&app.db, "user", 1000).await.unwrap().len(), 501);
+    let seen = upstream.requests.lock().await;
+    assert_eq!(seen.len(), 7);
+    assert!(seen.iter().all(|(method, path)| {
+        method == "GET"
+            && [
+                "/api/nodes",
+                "/api/users?start=0&size=500",
+                "/api/users?start=500&size=500",
+                "/api/hwid/devices?start=0&size=500",
+            ]
+            .contains(&path.as_str())
+    }));
+    task.abort();
 }
 #[tokio::test]
 async fn enrollment_is_atomic_and_metrics_are_idempotent() {

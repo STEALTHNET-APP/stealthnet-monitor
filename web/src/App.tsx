@@ -318,7 +318,7 @@ function Shell() {
           )}
           <footer className="app-footer">
             <span>
-              stealthnet-monitor <b>0.1.0</b>
+              stealthnet-monitor <b>0.1.1</b>
             </span>
             <span>
               {demo

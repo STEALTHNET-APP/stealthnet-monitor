@@ -128,6 +128,32 @@ async fn main() -> Result<()> {
             tx_bytes_per_sec: tx as f64 / elapsed,
             hostname: System::host_name().unwrap_or_else(|| "unknown".into()),
             version: env!("CARGO_PKG_VERSION").into(),
+            addresses: networks
+                .iter()
+                .filter(|(name, _)| {
+                    !name.starts_with("lo")
+                        && !name.starts_with("docker")
+                        && !name.starts_with("veth")
+                        && !name.starts_with("br-")
+                })
+                .flat_map(|(_, network)| network.ip_networks().iter().map(|network| network.addr))
+                .filter(|ip| match ip {
+                    std::net::IpAddr::V4(ip) => {
+                        !ip.is_private()
+                            && !ip.is_loopback()
+                            && !ip.is_link_local()
+                            && !ip.is_unspecified()
+                    }
+                    std::net::IpAddr::V6(ip) => {
+                        !ip.is_loopback()
+                            && !ip.is_unspecified()
+                            && !ip.is_unicast_link_local()
+                            && !ip.is_unique_local()
+                    }
+                })
+                .take(32)
+                .map(|ip| ip.to_string())
+                .collect(),
             events: cfg
                 .event_file
                 .as_ref()
@@ -218,7 +244,7 @@ impl EventReader {
         }
         let mut reader = std::io::BufReader::new(file);
         let mut out = vec![];
-        for _ in 0..100 {
+        for _ in 0..1000 {
             let mut buf = String::new();
             let Ok(n) = reader.read_line(&mut buf) else {
                 break;

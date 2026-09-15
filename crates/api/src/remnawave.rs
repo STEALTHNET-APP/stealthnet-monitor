@@ -74,6 +74,7 @@ pub async fn sync(app: &App) -> Result<Value, Error> {
     result
 }
 async fn sync_inner(app: &App, c: &Config) -> Result<Value, Error> {
+    let sync_time = now();
     let nodes = get(app, c, "/nodes").await?;
     let node_rows = nodes
         .as_array()
@@ -85,11 +86,10 @@ async fn sync_inner(app: &App, c: &Config) -> Result<Value, Error> {
             .map(str::to_owned)
             .or_else(|| n["id"].as_i64().map(|n| n.to_string()))
             .ok_or_else(|| Error::bad("Remnawave: у ноды нет идентификатора"))?;
-        db::save_record(&app.db,"remna_node",&id,&json!({"id":id,"name":n["name"],"address":n["address"],"is_connected":n["isConnected"],"users_online":n["usersOnline"],"country_code":n["countryCode"],"source":"Remnawave"}),now()).await?;
+        db::save_record(&app.db,"remna_node",&id,&json!({"id":id,"name":n["name"],"address":n["address"],"is_connected":n["isConnected"],"users_online":n["usersOnline"],"country_code":n["countryCode"],"source":"Remnawave"}),sync_time).await?;
     }
     let mut start = 0;
     let mut users = 0;
-    let sync_time = now();
     loop {
         let page = get(app, c, &format!("/users?start={start}&size=500")).await?;
         let rows = page["users"]
@@ -110,7 +110,7 @@ async fn sync_inner(app: &App, c: &Config) -> Result<Value, Error> {
                 .find(|n| n["uuid"] == node_id)
                 .and_then(|n| n["name"].as_str())
                 .unwrap_or("—");
-            let payload = json!({"id":id,"name":u["username"],"status":match u["status"].as_str(){Some("ACTIVE")=>"Учётная запись активна",Some("DISABLED")=>"Отключена",Some("EXPIRED")=>"Истекла",_=>"Не определён"},"connections":null,"devices":null,"traffic":traffic["usedTrafficBytes"].as_f64().map(|v|v/1e9),"node":node_name,"region":"—","last_seen":timestamp(&traffic["onlineAt"]),"source":"Remnawave API","synced_at":sync_time});
+            let payload = json!({"id":id,"remna_id":u["id"],"name":u["username"],"status":match u["status"].as_str(){Some("ACTIVE")=>"Учётная запись активна",Some("DISABLED")=>"Отключена",Some("EXPIRED")=>"Истекла",_=>"Не определён"},"connections":null,"devices":null,"traffic":traffic["usedTrafficBytes"].as_f64().map(|v|v/1e9),"node":node_name,"region":"—","last_seen":timestamp(&traffic["onlineAt"]),"source":"Remnawave API","synced_at":sync_time});
             db::save_record(&app.db, "user", &id, &payload, sync_time).await?;
         }
         users += rows.len();
@@ -143,8 +143,9 @@ async fn sync_inner(app: &App, c: &Config) -> Result<Value, Error> {
             }
         }
     }
-    // Delete users only after every page was received successfully.
-    sqlx::query("DELETE FROM records WHERE kind='user' AND time<$1")
+    // Remove stale copies only from this monitor's database after a complete sync.
+    // The upstream Remnawave API is read-only: every request above is GET.
+    sqlx::query("DELETE FROM records WHERE kind IN ('user','remna_node') AND time<$1")
         .bind(sync_time)
         .execute(&app.db)
         .await?;

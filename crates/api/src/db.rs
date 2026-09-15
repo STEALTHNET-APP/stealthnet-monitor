@@ -122,18 +122,32 @@ pub async fn nodes(pool: &AnyPool) -> Result<Vec<Value>> {
                 p[k] = Value::Null;
             }
         }
-        if let Some(meta) = setting(
-            pool,
-            &format!("billing:{}", p["id"].as_str().unwrap_or_default()),
-        )
+        out.push(p);
+    }
+    let mut remna = vec![];
+    for row in sqlx::query("SELECT payload,time FROM records WHERE kind='remna_node'")
+        .fetch_all(pool)
         .await?
-        {
-            let b: Value = serde_json::from_str(&meta)?;
-            for (k, v) in b.as_object().unwrap() {
-                p[k] = v.clone();
+    {
+        let mut node: Value = serde_json::from_str(&row.get::<String, _>("payload"))?;
+        node["synced_at"] = json!(row.get::<i64, _>("time"));
+        remna.push(node);
+    }
+    let mut out = crate::node_inventory::merge(out, &remna);
+    for p in &mut out {
+        let mut keys = vec![];
+        if let Some(id) = p["remnawave_id"].as_str() {
+            keys.push(format!("billing:remna:{id}"));
+        }
+        keys.push(format!("billing:{}", p["id"].as_str().unwrap_or_default()));
+        for key in keys {
+            if let Some(meta) = setting(pool, &key).await? {
+                let b: Value = serde_json::from_str(&meta)?;
+                for (k, v) in b.as_object().unwrap() {
+                    p[k] = v.clone();
+                }
             }
         }
-        out.push(p);
     }
     Ok(out)
 }

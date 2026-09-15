@@ -1,5 +1,5 @@
 import { BillingFields, BillingData } from "../components/Billing";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Send,
@@ -919,7 +919,7 @@ export function Settings() {
               <dl className="details">
                 <div>
                   <dt>Версия</dt>
-                  <dd>0.1.0-dev</dd>
+                  <dd>0.1.1-dev</dd>
                 </div>
                 <div>
                   <dt>Режим</dt>
@@ -1034,7 +1034,7 @@ function Updates() {
           <Monitor size={45} />
           <div>
             <span className="muted">Установленная версия</span>
-            <h2>v0.1.0</h2>
+            <h2>v0.1.1</h2>
             <p>Первая тестовая версия</p>
           </div>
           <ArrowRight size={25} />
@@ -1100,6 +1100,7 @@ function Updates() {
 }
 export function AddNode() {
   const { demo, data, toast, refresh } = useStore();
+  const [params] = useSearchParams();
   const [mode, setMode] = useState("existing");
   const [billing, setBilling] = useState<BillingData>({
     provider: "",
@@ -1107,11 +1108,13 @@ export function AddNode() {
     monthly_cost: null,
     currency: "USD",
   });
-  const [name, setName] = useState("Frankfurt-02");
-  const [address, setAddress] = useState("");
-  const [region, setRegion] = useState(demo ? "de" : "xx");
+  const [name, setName] = useState(params.get("name") || "Frankfurt-02");
+  const [address, setAddress] = useState(params.get("address") || "");
+  const [region, setRegion] = useState(params.get("region") || (demo ? "de" : "xx"));
   const [nodeSecret, setNodeSecret] = useState("");
   const [nodeImage, setNodeImage] = useState("");
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState("");
   const [port, setPort] = useState(2222);
   const [command, setCommand] = useState("");
   const [enrollment, setEnrollment] = useState("");
@@ -1119,6 +1122,29 @@ export function AddNode() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(false);
   const [newNode, setNewNode] = useState("");
+  const loadNodeImage = useCallback(async (overwrite = false, signal?: AbortSignal) => {
+    setImageLoading(true);
+    setImageError("");
+    try {
+      const release = demo
+        ? { image: "remnawave/node:3.4.1" }
+        : await api<{ image: string }>("/node-image/latest", { signal });
+      if (!signal?.aborted) setNodeImage((current) => overwrite || !current ? release.image : current);
+    } catch (e) {
+      if (!signal?.aborted) setImageError((e as Error).message);
+    } finally {
+      if (!signal?.aborted) setImageLoading(false);
+    }
+  }, [demo]);
+  useEffect(() => {
+    if (mode !== "clean") {
+      setImageLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    void loadNodeImage(false, controller.signal);
+    return () => controller.abort();
+  }, [mode, loadNodeImage]);
   useEffect(() => {
     if (!enrollment || demo) return;
     const i = setInterval(
@@ -1156,7 +1182,7 @@ export function AddNode() {
         const res = await api("/enrollments", {
           method: "POST",
           body: JSON.stringify({
-            name,
+            name: name.trim(),
             address,
             mode,
             ...billing,
@@ -1336,10 +1362,13 @@ export function AddNode() {
                 <input
                   required
                   maxLength={80}
-                  pattern="[A-Za-z0-9._ -]+"
+                  pattern={String.raw`[\p{L}\p{N}._ \-]+`}
+                  title="До 80 символов: буквы, цифры, пробел, точка, дефис или подчёркивание"
+                  aria-describedby="server-name-help"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
+                <small id="server-name-help" className="footnote">Можно на русском, например «Нидерланды-01».</small>
               </label>
               <label>
                 IP сервера (необязательно)
@@ -1348,6 +1377,7 @@ export function AddNode() {
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="IPv4 или IPv6"
                 />
+                <small className="footnote">Если оставить пустым, агент передаст публичный IP своего сетевого интерфейса.</small>
               </label>
               <label>
                 Регион
@@ -1376,15 +1406,26 @@ export function AddNode() {
                     />
                   </label>
                   <div className="grid two">
-                    <label>
-                      Версия образа
-                      <input
-                        required={!demo}
-                        value={nodeImage}
-                        placeholder="remnawave/node:версия"
-                        onChange={(e) => setNodeImage(e.target.value)}
-                      />
-                    </label>
+                    <div>
+                      <label>
+                        Версия образа
+                        <input
+                          required={!demo}
+                          value={nodeImage}
+                          aria-describedby="node-image-help"
+                          aria-busy={imageLoading}
+                          placeholder={imageLoading ? "Получаем актуальную версию…" : "remnawave/node:тег"}
+                          onChange={(e) => setNodeImage(e.target.value)}
+                        />
+                        <small id="node-image-help" className="footnote" aria-live="polite">
+                          {imageLoading ? "Проверяем официальный релиз…" : demo ? "Пример версии для демонстрации." : "Стабильная версия подставляется автоматически. Можно указать другую."}
+                        </small>
+                      </label>
+                      {imageError && <p className="red" role="alert">{imageError}</p>}
+                      <button type="button" className="button subtle" disabled={imageLoading} onClick={() => void loadNodeImage(true)}>
+                        <RefreshCw size={16} /> Подставить актуальную
+                      </button>
+                    </div>
                     <label>
                       NODE_PORT
                       <input
@@ -1399,8 +1440,8 @@ export function AddNode() {
                   </div>
                   <p className="footnote">
                     Создайте ноду и выберите конфигурационный профиль в
-                    Remnawave. Возьмите SECRET_KEY и версию образа из выданного
-                    Docker Compose.
+                    Remnawave. Возьмите SECRET_KEY и NODE_PORT из выданного
+                    Docker Compose. Если вашей панели нужна определённая версия ноды, укажите её в поле образа.
                   </p>
                 </>
               )}
@@ -1440,7 +1481,7 @@ export function AddNode() {
               Выбран режим:{" "}
               {mode === "existing" ? "работающая нода" : "чистый сервер"}
             </span>
-            <button className="button primary" disabled={busy}>
+            <button className="button primary" disabled={busy || (mode === "clean" && imageLoading)}>
               Продолжить <ArrowRight size={18} />
             </button>
           </Panel>

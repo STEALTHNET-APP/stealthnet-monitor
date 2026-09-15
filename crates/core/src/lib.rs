@@ -82,20 +82,33 @@ pub struct EnrollmentConfig {
 fn default_port() -> u16 {
     2222
 }
+pub fn valid_node_image(image: &str) -> bool {
+    image.strip_prefix("remnawave/node:").is_some_and(|tag| {
+        !tag.is_empty()
+            && tag.len() <= 128
+            && tag != "latest"
+            && tag.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+            && tag
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+    })
+}
 impl EnrollmentConfig {
     pub fn validate(&self) -> Result<(), &'static str> {
         self.billing.validate()?;
         if !self.address.is_empty() && self.address.parse::<std::net::IpAddr>().is_err() {
             return Err("Неверный IP-адрес сервера");
         }
-        if self.name.is_empty()
-            || self.name.len() > 80
+        if self.name.trim().is_empty()
+            || self.name.chars().count() > 80
             || !self
                 .name
                 .chars()
-                .all(|c| c.is_ascii_alphanumeric() || "._ -".contains(c))
+                .all(|c| c.is_alphanumeric() || "._ -".contains(c))
         {
-            return Err("Недопустимое имя сервера");
+            return Err(
+                "Название сервера: от 1 до 80 символов — буквы, цифры, пробел, точка, дефис или подчёркивание",
+            );
         }
         if !["existing", "clean"].contains(&self.mode.as_str()) {
             return Err("Неизвестный сценарий");
@@ -115,14 +128,14 @@ impl EnrollmentConfig {
             {
                 return Err("Нужен SECRET_KEY из Remnawave");
             }
-            if self.node_image.as_ref().is_none_or(|v| {
-                !v.starts_with("remnawave/node:")
-                    || v.ends_with(":latest")
-                    || !v
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || "/._:-".contains(c))
-            }) {
-                return Err("Укажите фиксированную версию remnawave/node:версия");
+            if self
+                .node_image
+                .as_ref()
+                .is_none_or(|v| !valid_node_image(v))
+            {
+                return Err(
+                    "Выберите версию образа автоматически или укажите remnawave/node с конкретным тегом",
+                );
             }
             if self.node_port == 0 {
                 return Err("Недопустимый порт");
@@ -143,6 +156,8 @@ pub struct Telemetry {
     pub hostname: String,
     pub version: String,
     #[serde(default)]
+    pub addresses: Vec<String>,
+    #[serde(default)]
     pub events: Vec<Observation>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,13 +168,20 @@ pub struct Observation {
     pub user: Option<String>,
     pub ip: Option<String>,
     pub evidence: String,
+    #[serde(default)]
+    pub protocol: Option<String>,
 }
 impl Telemetry {
     pub fn validate(&self, clock: i64) -> Result<(), &'static str> {
         if uuid::Uuid::parse_str(&self.id).is_err()
             || self.hostname.len() > 250
             || self.version.len() > 50
-            || self.events.len() > 100
+            || self.events.len() > 1000
+            || self.addresses.len() > 32
+            || self
+                .addresses
+                .iter()
+                .any(|v| v.parse::<std::net::IpAddr>().is_err())
         {
             return Err("Неверная телеметрия");
         }
@@ -183,6 +205,9 @@ impl Telemetry {
                 || e.id.len() > 100
                 || e.evidence.len() > 1000
                 || e.user.as_ref().is_some_and(|v| v.len() > 250)
+                || e.protocol
+                    .as_ref()
+                    .is_some_and(|v| !["TCP", "UDP"].contains(&v.as_str()))
                 || e.ip
                     .as_ref()
                     .is_some_and(|v| v.parse::<std::net::IpAddr>().is_err())
@@ -263,6 +288,7 @@ mod tests {
             tx_bytes_per_sec: 3.,
             hostname: "node".into(),
             version: "test".into(),
+            addresses: vec![],
             events: vec![],
         };
         assert!(t.validate(now()).is_ok());

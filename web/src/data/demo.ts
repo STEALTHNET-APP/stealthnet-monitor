@@ -1,4 +1,7 @@
 export type Node = {
+  source?: "agent" | "remnawave";
+  remnawave_id?: string;
+  location_source?: string;
   provider?: string;
   expires_at?: number | null;
   monthly_cost?: number | null;
