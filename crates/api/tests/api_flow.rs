@@ -12,6 +12,19 @@ use tokio::sync::Mutex;
 use tower::ServiceExt;
 
 #[tokio::test]
+async fn deployment_history_requires_administrator_session() {
+    let a = app().await;
+    let token = admin(&a).await;
+    let r = router(a, "/tmp/no-web", "/tmp/no-downloads");
+    let (status, _) = request(&r, "GET", "/api/updates", Value::Null, None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, data) = request(&r, "GET", "/api/updates", Value::Null, Some(&token), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(data["rows"].is_array());
+    assert_eq!(data["installed_version"], env!("CARGO_PKG_VERSION"));
+}
+
+#[tokio::test]
 async fn traffic_uses_measured_intervals_and_online_history_links_physical_nodes() {
     let a = app().await;
     let time = now();

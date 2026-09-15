@@ -3077,3 +3077,11 @@ tr.clickable:hover td {
     display: none;
   }
 }
+
+.update-result { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.update-details { margin: 0 0 20px; }
+.update-details > div { display: flex; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.update-details dt { color: var(--muted); }
+.update-details dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.steps .running > span { border-color: var(--blue); color: var(--blue); }
+.steps .failed > span, .steps .interrupted > span { border-color: var(--red); color: var(--red); }

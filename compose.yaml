@@ -29,8 +29,10 @@ services:
       BIND_ADDR: 0.0.0.0:8787
       DATA_DIR: /tmp/stealthnet
       GEOIP_DIR: /app/geoip
+      UPDATE_HISTORY_DIR: /app/updates
     volumes:
       - geoip_data:/app/geoip
+      - ./.state/updates:/app/updates:ro
     ports:
       - "127.0.0.1:${LOCAL_PORT:-8787}:8787"
     depends_on:

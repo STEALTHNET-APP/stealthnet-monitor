@@ -9,7 +9,7 @@
 
 **stealthnet-monitor** — панель мониторинга серверов и нод Remnawave: ресурсы, трафик, география подключений, устройства и уведомления в Telegram. Устанавливается на ваш сервер; агент собирает данные на каждой ноде.
 
-**v0.1.5 · поиск по полной базе, история онлайна, полный импорт HWID и ежемесячные платежи.**
+**v0.1.6 · поиск по полной базе, история онлайна, полный импорт HWID и ежемесячные платежи.**
 
 <p align="center">
   <a href="https://github.com/STEALTHNET-APP/stealthnet-monitor/actions/workflows/ci.yml"><img src="https://github.com/STEALTHNET-APP/stealthnet-monitor/actions/workflows/ci.yml/badge.svg" alt="Проверки сборки и тесты" /></a>

@@ -7,3 +7,5 @@ target
 design
 .env
 *.db*
+
+.state/

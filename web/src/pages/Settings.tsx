@@ -1,3 +1,4 @@
+import { Updates } from "./Updates";
 import { BillingFields, BillingData } from "../components/Billing";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -1031,78 +1032,6 @@ export function Settings() {
           </p>
         </Panel>
       )}
-    </>
-  );
-}
-function Updates() {
-  return (
-    <>
-      <Panel title="Версия панели">
-        <div className="version-banner">
-          <Monitor size={45} />
-          <div>
-            <span className="muted">Установленная версия</span>
-            <h2>v0.1.5</h2>
-            <p>Первая тестовая версия</p>
-          </div>
-          <ArrowRight size={25} />
-          <div>
-            <span className="muted">Источник обновлений</span>
-            <h2>GitHub Releases</h2>
-            <a
-              href="https://github.com/STEALTHNET-APP/stealthnet-monitor/releases"
-              target="_blank"
-              rel="noreferrer"
-            >
-              STEALTHNET-APP/stealthnet-monitor
-            </a>
-          </div>
-        </div>
-      </Panel>
-      <Panel
-        title="Обновление через терминал"
-        sub="Выполните команду в каталоге установленной панели"
-      >
-        <CopyText text="make update" />
-        <h3>Этапы обновления</h3>
-        <div className="steps">
-          {[
-            "Резервная копия",
-            "Загрузка версии",
-            "Миграции",
-            "Проверка запуска",
-          ].map((t, i) => (
-            <div key={t}>
-              <span>{i + 1}</span>
-              <b>{t}</b>
-              <small>Ожидание команды</small>
-            </div>
-          ))}
-        </div>
-      </Panel>
-      <div className="grid two">
-        <Panel title="Команды управления" sub="Команды выполняются на сервере">
-          <div className="command-list">
-            {["start", "stop", "status", "logs", "backup", "rollback"].map(
-              (c) => (
-                <CopyText key={c} text={"make " + c} />
-              ),
-            )}
-          </div>
-        </Panel>
-        <Panel title="Последнее обновление">
-          <Empty
-            title="Истории обновлений пока нет"
-            text="История операций доступна в терминале сервера."
-          />
-          <div className="notice-box">
-            <p>
-              Настройки и данные сохраняются вне каталога релиза. Перед
-              обновлением создаётся резервная копия.
-            </p>
-          </div>
-        </Panel>
-      </div>
     </>
   );
 }

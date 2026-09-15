@@ -357,7 +357,7 @@ function Shell() {
           )}
           <footer className="app-footer">
             <span>
-              stealthnet-monitor <b>0.1.5</b>
+              stealthnet-monitor <b>0.1.6</b>
             </span>
             {!demo && (data.geoip?.available || data.geoip?.asn_available) && (
               <a href="https://db-ip.com" target="_blank" rel="noreferrer">

@@ -21,3 +21,5 @@ web/*.tsbuildinfo
 
 __pycache__/
 *.pyc
+
+.state/

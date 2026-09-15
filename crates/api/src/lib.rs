@@ -9,6 +9,7 @@ pub mod remnawave;
 pub mod secrets;
 pub mod telegram;
 pub mod traffic;
+pub mod updates;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     Json, Router,
@@ -72,6 +73,7 @@ type Result<T> = std::result::Result<T, Error>;
 pub fn router(app: App, web: &str, downloads: &str) -> Router {
     let private = Router::new()
         .route("/snapshot", get(snapshot))
+        .route("/updates", get(updates::history))
         .route("/inventory-summary", get(inventory::summary))
         .route("/traffic-summary", get(traffic::summary))
         .route("/inventory/{kind}", get(inventory::list))
