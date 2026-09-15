@@ -1,0 +1,25 @@
+[package]
+name = "stealthnet-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+stealthnet-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+axum = "0.8"
+tower-http = { version = "0.6", features = ["fs", "compression-gzip", "limit"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "any"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+base64 = "0.22"
+chrono = "0.4"
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

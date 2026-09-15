@@ -1,0 +1,70 @@
+name: stealthnet-monitor
+services:
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: stealthnet
+      POSTGRES_USER: stealthnet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U stealthnet -d stealthnet"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+  api:
+    image: ${PANEL_IMAGE:-stealthnet-monitor:local}
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      DATABASE_URL: postgres://stealthnet:${POSTGRES_PASSWORD}@db:5432/stealthnet
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
+      PUBLIC_URL: https://${DOMAIN:?Set DOMAIN}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      BIND_ADDR: 0.0.0.0:8787
+      DATA_DIR: /tmp/stealthnet
+    ports:
+      - "127.0.0.1:${LOCAL_PORT:-8787}:8787"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8787/api/health]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+    networks: [internal, egress]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [egress]
+    depends_on:
+      api:
+        condition: service_healthy
+networks:
+  internal:
+    internal: true
+  egress:
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

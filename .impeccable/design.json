@@ -1,0 +1,576 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-15T15:57:40.997Z",
+  "title": "Design System: stealthnet-monitor",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Graphite Canvas",
+        "tonalRamp": [
+          "oklch(15.00% 0.0207 245.80)",
+          "oklch(26.43% 0.0207 245.80)",
+          "oklch(37.86% 0.0207 245.80)",
+          "oklch(49.29% 0.0207 245.80)",
+          "oklch(60.71% 0.0207 245.80)",
+          "oklch(72.14% 0.0207 245.80)",
+          "oklch(83.57% 0.0207 245.80)",
+          "oklch(95.00% 0.0207 245.80)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar Graphite",
+        "tonalRamp": [
+          "oklch(15.00% 0.0213 242.99)",
+          "oklch(26.43% 0.0213 242.99)",
+          "oklch(37.86% 0.0213 242.99)",
+          "oklch(49.29% 0.0213 242.99)",
+          "oklch(60.71% 0.0213 242.99)",
+          "oklch(72.14% 0.0213 242.99)",
+          "oklch(83.57% 0.0213 242.99)",
+          "oklch(95.00% 0.0213 242.99)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Panel Graphite",
+        "tonalRamp": [
+          "oklch(15.00% 0.0226 246.12)",
+          "oklch(26.43% 0.0226 246.12)",
+          "oklch(37.86% 0.0226 246.12)",
+          "oklch(49.29% 0.0226 246.12)",
+          "oklch(60.71% 0.0226 246.12)",
+          "oklch(72.14% 0.0226 246.12)",
+          "oklch(83.57% 0.0226 246.12)",
+          "oklch(95.00% 0.0226 246.12)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Structural Line",
+        "tonalRamp": [
+          "oklch(15.00% 0.0282 244.65)",
+          "oklch(26.43% 0.0282 244.65)",
+          "oklch(37.86% 0.0282 244.65)",
+          "oklch(49.29% 0.0282 244.65)",
+          "oklch(60.71% 0.0282 244.65)",
+          "oklch(72.14% 0.0282 244.65)",
+          "oklch(83.57% 0.0282 244.65)",
+          "oklch(95.00% 0.0282 244.65)"
+        ]
+      },
+      "line-soft": {
+        "role": "neutral",
+        "displayName": "Soft Line",
+        "tonalRamp": [
+          "oklch(15.00% 0.0255 241.82)",
+          "oklch(26.43% 0.0255 241.82)",
+          "oklch(37.86% 0.0255 241.82)",
+          "oklch(49.29% 0.0255 241.82)",
+          "oklch(60.71% 0.0255 241.82)",
+          "oklch(72.14% 0.0255 241.82)",
+          "oklch(83.57% 0.0255 241.82)",
+          "oklch(95.00% 0.0255 241.82)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Cool Foreground",
+        "tonalRamp": [
+          "oklch(15.00% 0.0120 259.82)",
+          "oklch(26.43% 0.0120 259.82)",
+          "oklch(37.86% 0.0120 259.82)",
+          "oklch(49.29% 0.0120 259.82)",
+          "oklch(60.71% 0.0120 259.82)",
+          "oklch(72.14% 0.0120 259.82)",
+          "oklch(83.57% 0.0120 259.82)",
+          "oklch(95.00% 0.0120 259.82)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Steel",
+        "tonalRamp": [
+          "oklch(15.00% 0.0331 251.19)",
+          "oklch(26.43% 0.0331 251.19)",
+          "oklch(37.86% 0.0331 251.19)",
+          "oklch(49.29% 0.0331 251.19)",
+          "oklch(60.71% 0.0331 251.19)",
+          "oklch(72.14% 0.0331 251.19)",
+          "oklch(83.57% 0.0331 251.19)",
+          "oklch(95.00% 0.0331 251.19)"
+        ]
+      },
+      "mint": {
+        "role": "primary",
+        "displayName": "Signal Mint",
+        "tonalRamp": [
+          "oklch(15.00% 0.1512 162.10)",
+          "oklch(26.43% 0.1512 162.10)",
+          "oklch(37.86% 0.1512 162.10)",
+          "oklch(49.29% 0.1512 162.10)",
+          "oklch(60.71% 0.1512 162.10)",
+          "oklch(72.14% 0.1512 162.10)",
+          "oklch(83.57% 0.1512 162.10)",
+          "oklch(95.00% 0.1512 162.10)"
+        ]
+      },
+      "blue": {
+        "role": "secondary",
+        "displayName": "Connection Blue",
+        "tonalRamp": [
+          "oklch(15.00% 0.1422 251.98)",
+          "oklch(26.43% 0.1422 251.98)",
+          "oklch(37.86% 0.1422 251.98)",
+          "oklch(49.29% 0.1422 251.98)",
+          "oklch(60.71% 0.1422 251.98)",
+          "oklch(72.14% 0.1422 251.98)",
+          "oklch(83.57% 0.1422 251.98)",
+          "oklch(95.00% 0.1422 251.98)"
+        ]
+      },
+      "amber": {
+        "role": "secondary",
+        "displayName": "Warning Amber",
+        "tonalRamp": [
+          "oklch(15.00% 0.1596 84.97)",
+          "oklch(26.43% 0.1596 84.97)",
+          "oklch(37.86% 0.1596 84.97)",
+          "oklch(49.29% 0.1596 84.97)",
+          "oklch(60.71% 0.1596 84.97)",
+          "oklch(72.14% 0.1596 84.97)",
+          "oklch(83.57% 0.1596 84.97)",
+          "oklch(95.00% 0.1596 84.97)"
+        ]
+      },
+      "red": {
+        "role": "secondary",
+        "displayName": "Critical Red",
+        "tonalRamp": [
+          "oklch(15.00% 0.1994 24.38)",
+          "oklch(26.43% 0.1994 24.38)",
+          "oklch(37.86% 0.1994 24.38)",
+          "oklch(49.29% 0.1994 24.38)",
+          "oklch(60.71% 0.1994 24.38)",
+          "oklch(72.14% 0.1994 24.38)",
+          "oklch(83.57% 0.1994 24.38)",
+          "oklch(95.00% 0.1994 24.38)"
+        ]
+      },
+      "purple": {
+        "role": "secondary",
+        "displayName": "User Violet",
+        "tonalRamp": [
+          "oklch(15.00% 0.1501 297.05)",
+          "oklch(26.43% 0.1501 297.05)",
+          "oklch(37.86% 0.1501 297.05)",
+          "oklch(49.29% 0.1501 297.05)",
+          "oklch(60.71% 0.1501 297.05)",
+          "oklch(72.14% 0.1501 297.05)",
+          "oklch(83.57% 0.1501 297.05)",
+          "oklch(95.00% 0.1501 297.05)"
+        ]
+      },
+      "input-bg": {
+        "role": "neutral",
+        "displayName": "Recessed Field",
+        "tonalRamp": [
+          "oklch(15.00% 0.0237 243.83)",
+          "oklch(26.43% 0.0237 243.83)",
+          "oklch(37.86% 0.0237 243.83)",
+          "oklch(49.29% 0.0237 243.83)",
+          "oklch(60.71% 0.0237 243.83)",
+          "oklch(72.14% 0.0237 243.83)",
+          "oklch(83.57% 0.0237 243.83)",
+          "oklch(95.00% 0.0237 243.83)"
+        ]
+      },
+      "input-border": {
+        "role": "neutral",
+        "displayName": "Field Border",
+        "tonalRamp": [
+          "oklch(15.00% 0.0350 242.54)",
+          "oklch(26.43% 0.0350 242.54)",
+          "oklch(37.86% 0.0350 242.54)",
+          "oklch(49.29% 0.0350 242.54)",
+          "oklch(60.71% 0.0350 242.54)",
+          "oklch(72.14% 0.0350 242.54)",
+          "oklch(83.57% 0.0350 242.54)",
+          "oklch(95.00% 0.0350 242.54)"
+        ]
+      },
+      "button-primary": {
+        "role": "primary",
+        "displayName": "Action Mint",
+        "tonalRamp": [
+          "oklch(15.00% 0.1372 164.66)",
+          "oklch(26.43% 0.1372 164.66)",
+          "oklch(37.86% 0.1372 164.66)",
+          "oklch(49.29% 0.1372 164.66)",
+          "oklch(60.71% 0.1372 164.66)",
+          "oklch(72.14% 0.1372 164.66)",
+          "oklch(83.57% 0.1372 164.66)",
+          "oklch(95.00% 0.1372 164.66)"
+        ]
+      },
+      "button-primary-hover": {
+        "role": "primary",
+        "displayName": "Action Mint Hover",
+        "tonalRamp": [
+          "oklch(15.00% 0.1111 168.06)",
+          "oklch(26.43% 0.1111 168.06)",
+          "oklch(37.86% 0.1111 168.06)",
+          "oklch(49.29% 0.1111 168.06)",
+          "oklch(60.71% 0.1111 168.06)",
+          "oklch(72.14% 0.1111 168.06)",
+          "oklch(83.57% 0.1111 168.06)",
+          "oklch(95.00% 0.1111 168.06)"
+        ]
+      },
+      "button-primary-ink": {
+        "role": "primary",
+        "displayName": "Action Ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.0349 176.02)",
+          "oklch(26.43% 0.0349 176.02)",
+          "oklch(37.86% 0.0349 176.02)",
+          "oklch(49.29% 0.0349 176.02)",
+          "oklch(60.71% 0.0349 176.02)",
+          "oklch(72.14% 0.0349 176.02)",
+          "oklch(83.57% 0.0349 176.02)",
+          "oklch(95.00% 0.0349 176.02)"
+        ]
+      },
+      "navigation-active": {
+        "role": "primary",
+        "displayName": "Active Navigation Surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.0284 206.75)",
+          "oklch(26.43% 0.0284 206.75)",
+          "oklch(37.86% 0.0284 206.75)",
+          "oklch(49.29% 0.0284 206.75)",
+          "oklch(60.71% 0.0284 206.75)",
+          "oklch(72.14% 0.0284 206.75)",
+          "oklch(83.57% 0.0284 206.75)",
+          "oklch(95.00% 0.0284 206.75)"
+        ]
+      },
+      "navigation-active-ink": {
+        "role": "primary",
+        "displayName": "Navigation Mint",
+        "tonalRamp": [
+          "oklch(15.00% 0.1210 168.93)",
+          "oklch(26.43% 0.1210 168.93)",
+          "oklch(37.86% 0.1210 168.93)",
+          "oklch(49.29% 0.1210 168.93)",
+          "oklch(60.71% 0.1210 168.93)",
+          "oklch(72.14% 0.1210 168.93)",
+          "oklch(83.57% 0.1210 168.93)",
+          "oklch(95.00% 0.1210 168.93)"
+        ]
+      },
+      "status-neutral": {
+        "role": "neutral",
+        "displayName": "Neutral Status",
+        "tonalRamp": [
+          "oklch(15.00% 0.0286 253.27)",
+          "oklch(26.43% 0.0286 253.27)",
+          "oklch(37.86% 0.0286 253.27)",
+          "oklch(49.29% 0.0286 253.27)",
+          "oklch(60.71% 0.0286 253.27)",
+          "oklch(72.14% 0.0286 253.27)",
+          "oklch(83.57% 0.0286 253.27)",
+          "oklch(95.00% 0.0286 253.27)"
+        ]
+      },
+      "status-online": {
+        "role": "secondary",
+        "displayName": "Healthy Status",
+        "tonalRamp": [
+          "oklch(15.00% 0.1299 165.16)",
+          "oklch(26.43% 0.1299 165.16)",
+          "oklch(37.86% 0.1299 165.16)",
+          "oklch(49.29% 0.1299 165.16)",
+          "oklch(60.71% 0.1299 165.16)",
+          "oklch(72.14% 0.1299 165.16)",
+          "oklch(83.57% 0.1299 165.16)",
+          "oklch(95.00% 0.1299 165.16)"
+        ]
+      },
+      "status-warning": {
+        "role": "secondary",
+        "displayName": "Warning Status",
+        "tonalRamp": [
+          "oklch(15.00% 0.1452 83.02)",
+          "oklch(26.43% 0.1452 83.02)",
+          "oklch(37.86% 0.1452 83.02)",
+          "oklch(49.29% 0.1452 83.02)",
+          "oklch(60.71% 0.1452 83.02)",
+          "oklch(72.14% 0.1452 83.02)",
+          "oklch(83.57% 0.1452 83.02)",
+          "oklch(95.00% 0.1452 83.02)"
+        ]
+      },
+      "status-critical": {
+        "role": "secondary",
+        "displayName": "Critical Status",
+        "tonalRamp": [
+          "oklch(15.00% 0.1877 22.42)",
+          "oklch(26.43% 0.1877 22.42)",
+          "oklch(37.86% 0.1877 22.42)",
+          "oklch(49.29% 0.1877 22.42)",
+          "oklch(60.71% 0.1877 22.42)",
+          "oklch(72.14% 0.1877 22.42)",
+          "oklch(83.57% 0.1877 22.42)",
+          "oklch(95.00% 0.1877 22.42)"
+        ]
+      },
+      "status-info": {
+        "role": "secondary",
+        "displayName": "Informational Status",
+        "tonalRamp": [
+          "oklch(15.00% 0.1119 244.74)",
+          "oklch(26.43% 0.1119 244.74)",
+          "oklch(37.86% 0.1119 244.74)",
+          "oklch(49.29% 0.1119 244.74)",
+          "oklch(60.71% 0.1119 244.74)",
+          "oklch(72.14% 0.1119 244.74)",
+          "oklch(83.57% 0.1119 244.74)",
+          "oklch(95.00% 0.1119 244.74)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles; smaller on mobile."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel headings."
+      },
+      "subheading": {
+        "displayName": "Subheading",
+        "purpose": "Compact subordinate headings."
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "Prominent KPI reading."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Application root text."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Standard button and action labels."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Compact status and data labels."
+      },
+      "table-heading": {
+        "displayName": "Table heading",
+        "purpose": "Table headings; chart axes use the same nominal size."
+      }
+    },
+    "shadows": [
+      {
+        "name": "search-results",
+        "value": "0 10px 35px #050b1199",
+        "purpose": "Global search result overlay."
+      },
+      {
+        "name": "map-tooltip",
+        "value": "0 3px 16px #0005",
+        "purpose": "Node hover/focus tooltip."
+      },
+      {
+        "name": "dialog",
+        "value": "0 20px 70px #0007",
+        "purpose": "Modal surface above the workspace."
+      },
+      {
+        "name": "telegram-message",
+        "value": "0 4px 15px #020c1755",
+        "purpose": "Message preview within the Telegram panel."
+      },
+      {
+        "name": "toast",
+        "value": "0 10px 40px #01090788",
+        "purpose": "Transient operation feedback."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-colors",
+        "value": "background 0.16s, border-color 0.16s",
+        "purpose": "Button hover; disabled under reduced motion."
+      },
+      {
+        "name": "switch-thumb",
+        "value": "transform 0.15s",
+        "purpose": "Switch state change; disabled under reduced motion."
+      },
+      {
+        "name": "sidebar",
+        "value": "none",
+        "purpose": "Final stylesheet override keeps drawer changes immediate."
+      },
+      {
+        "name": "chart-animation",
+        "value": "false",
+        "purpose": "ECharts changes without animated plotting."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1700px",
+        "query": "(min-width: 1700px)"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1350px",
+        "query": "(max-width: 1350px)"
+      },
+      {
+        "name": "stacked-workspace",
+        "value": "1100px",
+        "query": "(max-width: 1100px)"
+      },
+      {
+        "name": "mobile",
+        "value": "760px",
+        "query": "(max-width: 760px)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Compact filled action for saving or starting the main task.",
+      "html": "<button class=\"ds-button-primary\">Сохранить данные</button>",
+      "css": ".ds-button-primary{font-family:Roboto,Arial,sans-serif;font-size:13px;font-weight:400;color:#edf2fa;background:transparent;min-height:38px;padding:8px 16px;border:1px solid #344958;border-radius:5px;display:inline-flex;gap:10px;justify-content:center;align-items:center;white-space:nowrap;cursor:pointer;transition:background .16s,border-color .16s}.ds-button-primary:hover{background:#213340;border-color:#587087}.ds-button-primary:disabled{opacity:.45;cursor:not-allowed}.ds-button-primary:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}@media(max-width:1100px){.ds-button-primary{padding:8px 12px}}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition:none}}.ds-button-primary{background:#65e7b4;color:#08231d;border-color:#65e7b4;font-weight:700}.ds-button-primary:hover{background:#8ff6d0;border-color:#8ff6d0}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Bordered action for a supporting task.",
+      "html": "<button class=\"ds-button-secondary\">Отправить тест</button>",
+      "css": ".ds-button-secondary{font-family:Roboto,Arial,sans-serif;font-size:13px;font-weight:400;color:#edf2fa;background:transparent;min-height:38px;padding:8px 16px;border:1px solid #344958;border-radius:5px;display:inline-flex;gap:10px;justify-content:center;align-items:center;white-space:nowrap;cursor:pointer;transition:background .16s,border-color .16s}.ds-button-secondary:hover{background:#213340;border-color:#587087}.ds-button-secondary:disabled{opacity:.45;cursor:not-allowed}.ds-button-secondary:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}@media(max-width:1100px){.ds-button-secondary{padding:8px 12px}}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition:none}}"
+    },
+    {
+      "name": "Subtle Button",
+      "kind": "button",
+      "refersTo": "button-subtle",
+      "description": "Quiet utility action with the shared button geometry.",
+      "html": "<button class=\"ds-button-subtle\">Обновить</button>",
+      "css": ".ds-button-subtle{font-family:Roboto,Arial,sans-serif;font-size:13px;font-weight:400;color:#edf2fa;background:transparent;min-height:38px;padding:8px 16px;border:1px solid #344958;border-radius:5px;display:inline-flex;gap:10px;justify-content:center;align-items:center;white-space:nowrap;cursor:pointer;transition:background .16s,border-color .16s}.ds-button-subtle:hover{background:#213340;border-color:#587087}.ds-button-subtle:disabled{opacity:.45;cursor:not-allowed}.ds-button-subtle:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}@media(max-width:1100px){.ds-button-subtle{padding:8px 12px}}@media(prefers-reduced-motion:reduce){.ds-button-subtle{transition:none}}.ds-button-subtle{border-color:transparent;color:var(--muted,#a5b6c9)}.ds-button-subtle:hover{background:#213340;border-color:#587087}"
+    },
+    {
+      "name": "Labeled Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Recessed text field with a persistent label and mint keyboard focus.",
+      "html": "<label class=\"ds-field\">Хостер / провайдер<input class=\"ds-field-input\" placeholder=\"Например, Hetzner\" maxlength=\"100\" /></label>",
+      "css": ".ds-field{font-family:Roboto,Arial,sans-serif;font-size:14px;display:flex;flex-direction:column;gap:8px;color:#b5c5d8;margin-bottom:20px}.ds-field-input{font-family:Roboto,Arial,sans-serif;font-size:14px;color:#edf2fa;background:#111c25;border:1px solid #354857;border-radius:5px;min-height:37px;padding:9px 12px;max-width:100%;color-scheme:dark}.ds-field-input::placeholder{color:#8196ad}.ds-field-input:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "Current route with a tinted surface and mint leading bar.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Пример навигации\"><a class=\"ds-nav-item ds-nav-current\" href=\"#overview\" aria-current=\"page\">Обзор</a><a class=\"ds-nav-item\" href=\"#map\">Карта</a></nav>",
+      "css": ".ds-nav{background:var(--sidebar,#131d25);padding:0 6px;width:216px}.ds-nav-item{font-family:Roboto,Arial,sans-serif;font-size:14px;font-weight:400;display:flex;align-items:center;gap:14px;height:43px;padding:0 17px;color:#c4d0df;border-radius:5px;position:relative;text-decoration:none}.ds-nav-item:hover{background:#1b2832}.ds-nav-current{color:#85f9d1;background:#1c3235}.ds-nav-current:hover{background:#1c3235}.ds-nav-current:before{content:\"\";position:absolute;left:0;top:3px;bottom:3px;width:3px;border-radius:3px;background:var(--mint,#63f1b4)}.ds-nav-item:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-online",
+      "description": "Readable status label and colored dot without a filled pill.",
+      "html": "<span class=\"ds-badge\"><i class=\"ds-badge-dot\" aria-hidden=\"true\"></i>Онлайн</span>",
+      "css": ".ds-badge{font-family:Roboto,Arial,sans-serif;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-size:12px;font-weight:400;color:#74edbd}.ds-badge-dot{width:8px;height:8px;background:currentColor;border-radius:50%;flex-shrink:0}"
+    },
+    {
+      "name": "Working Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat bordered surface with a compact title and subtitle.",
+      "html": "<section class=\"ds-panel\"><div class=\"ds-panel-heading\"><div><h2 class=\"ds-panel-title\">Хостер и аренда</h2><p class=\"ds-panel-subtitle\">Управляйте оплатой и сроком действия сервера</p></div></div></section>",
+      "css": ".ds-panel{font-family:Roboto,Arial,sans-serif;color:#edf2fa;background:var(--surface,#151f28);border:1px solid var(--line,#2a3844);border-radius:6px;padding:13px 14px;min-width:0}.ds-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;min-height:21px}.ds-panel-title{margin:0;font-size:18px;line-height:23px;font-weight:700}.ds-panel-subtitle{margin:2px 0 0;color:var(--muted,#a5b6c9);font-size:12px;line-height:17px}@media(max-width:760px){.ds-panel{padding:12px}.ds-panel-title{font-size:16px}}"
+    },
+    {
+      "name": "Period Selector",
+      "kind": "custom",
+      "description": "Header period choices showing the selected time window.",
+      "html": "<div class=\"ds-period\" aria-label=\"Период\"><button class=\"ds-period-option\">1 ч</button><button class=\"ds-period-option\">6 ч</button><button class=\"ds-period-option ds-period-active\" aria-pressed=\"true\">24 ч</button><button class=\"ds-period-option\">7 д</button></div>",
+      "css": ".ds-period{display:flex;border:1px solid #354453;border-radius:5px;overflow:hidden;width:max-content}.ds-period-option{font-family:Roboto,Arial,sans-serif;background:transparent;border:0;min-width:51px;height:32px;font-size:12px;font-weight:400;color:#adc0d4;padding:0 11px;cursor:pointer}.ds-period-active{background:#344252;color:#fff}.ds-period-option:hover{background:#2d3a48}.ds-period-option:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}"
+    },
+    {
+      "name": "Notification Switch",
+      "kind": "custom",
+      "description": "Enabled notification state using a compact mint track and pale thumb.",
+      "html": "<button class=\"ds-switch ds-switch-on\" role=\"switch\" aria-checked=\"true\" aria-label=\"Telegram включён\"><span class=\"ds-switch-thumb\"></span></button>",
+      "css": ".ds-switch{width:41px;height:23px;min-width:41px;position:relative;border-radius:20px;background:#394c62;border:1px solid #5b708a;cursor:pointer}.ds-switch-thumb{position:absolute;left:2px;top:2px;height:17px;width:17px;background:#c5d3e4;border-radius:50%;transition:transform .15s}.ds-switch-on{background:#22c997;border-color:#57e9bb}.ds-switch-on .ds-switch-thumb{background:#eefffa;transform:translateX(17px)}.ds-switch:focus-visible{outline:2px solid var(--mint,#63f1b4);outline-offset:3px}@media(prefers-reduced-motion:reduce){.ds-switch-thumb{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Graphite and Mint Monitoring Workspace",
+    "overview": "A precise, compact workspace for scanning network condition and moving into a node's details. Graphite backgrounds, thin borders, restrained mint accents, and Roboto establish the identity. Charts, geographic markers, tables, and inspectors carry the information; the surrounding interface stays quiet.\n\nThe approved overview and map images govern the visual direction. Preserve their density, proportions, and material character when extending the application. This document records the implemented system in `web/src`, including its responsive adaptations; it is not a claim of pixel-perfect equivalence to generated mockups. The superseded random direction seed does not govern future work. See [the fidelity contract](design/FIDELITY.md) for the reference hierarchy.",
+    "keyCharacteristics": [
+      "Dense, bordered graphite surfaces with narrow gaps.",
+      "Mint actions and selection, with distinct colors for status and data series.",
+      "One self-hosted font family with compact headings and prominent metric values.",
+      "Geographic context, counted clusters, and an adjacent node inspector.",
+      "Visible time controls, units, freshness, and demonstration labels."
+    ],
+    "rules": [
+      {
+        "name": "The Status Has Words Rule",
+        "body": "Pair the status dot or geographic color with a readable label, count, tooltip, or selected-node description; retain the meaning when color alone is insufficient.",
+        "section": "colors"
+      },
+      {
+        "name": "The Numeric Context Rule",
+        "body": "Keep a value's unit and scope visible. Unknown values remain an em dash or an explicit “Не указана” / “Не указан” state; a missing reading must not become a measured zero.",
+        "section": "typography"
+      },
+      {
+        "name": "The Context Travels Rule",
+        "body": "Responsive stacking keeps the selected node, time period, forms, and actions available. Preserve the content hierarchy when changing columns; use the existing scroll containers for wide tables.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Working Surface Rule",
+        "body": "Reuse flat bordered panels for persistent data; reserve overlay shadows for content that sits above or temporarily interrupts the workspace.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Count Every Located Node Rule",
+        "body": "Keep all nodes with known geography in projected-cell groups. Rank the group by critical, offline, warning, then online status, so its ring reveals the most urgent member. Opening a group shows the full urgency-sorted list; selecting a member updates the inspector. Do not silently sample nodes to reduce map clutter.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** preserve the approved graphite-and-mint direction and the compact working density.",
+      "**Do** reuse the self-hosted Roboto weights, shared controls, panel rhythm, and existing responsive breakpoints.",
+      "**Do** keep status words, units, scope, period, freshness, and demonstration labels visible in their relevant contexts.",
+      "**Do** retain every located node through counted clusters and make each cluster member selectable.",
+      "**Do** keep node charts scoped to the selected node and the shared visible period.",
+      "**Do** let forms stack and tables scroll using the shipped responsive patterns."
+    ],
+    "donts": [
+      "**Don't** replace the approved visual world with the superseded random seed or a new unrelated style.",
+      "**Don't** recreate interactive interface areas as background screenshots.",
+      "**Don't** turn missing measurements into zero, fabricate coordinates, or present demonstration values as live readings.",
+      "**Don't** use color alone to communicate a status or conflate a connection region with a node.",
+      "**Don't** apply overlay shadows to every data panel or add decorative display typography.",
+      "**Don't** treat generated preview tonal ramps or incidental one-off styles as additional normative application tokens."
+    ]
+  }
+}
