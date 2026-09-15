@@ -24,6 +24,7 @@ import {
 import { Chart } from "../components/Chart";
 import { useStore, api } from "../data/store";
 import { Row, datetime } from "../data/demo";
+import { RecordList } from "./Inventory";
 const incidentColumns: Column<Row & { id: string }>[] = [
   { key: "node", title: "Нода" },
   { key: "title", title: "Проблема" },
@@ -249,239 +250,65 @@ const complaintCols: Column<Row & { id: string }>[] = [
   },
 ];
 export function Torrents() {
-  const { data, addComplaint } = useStore();
-  const [params, setParams] = useSearchParams();
-  const tab =
-    params.get("tab") === "complaints" ? "Внешние жалобы" : "Обнаружения";
-  const [selected, setSelected] = useState("");
+  const { data } = useStore();
   const [q, setQ] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    subject: "",
-    provider: "",
-    ip: "",
-    node: "",
-    body: "",
-    type: "Abuse",
-  });
-  const isComplaint = tab === "Внешние жалобы";
-  const rows = (isComplaint ? data.complaints : data.detections).filter((r) =>
-    Object.values(r).join(" ").toLowerCase().includes(q.toLowerCase()),
+  const agents = data.nodes.filter((n) => n.source !== "remnawave");
+  const ready = agents.filter(
+    (n) =>
+      n.collector_torrents &&
+      data.updated_at - (n.collector_time || 0) < 180000,
   );
-  const record = rows.find((r) => r.id === selected) || rows[0];
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await addComplaint({
-        ...form,
-        id: "AB-" + Date.now(),
-        status: "new",
-        time: Date.now(),
-      });
-      setAdding(false);
-      setForm({
-        subject: "",
-        provider: "",
-        ip: "",
-        node: "",
-        body: "",
-        type: "Abuse",
-      });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
     <>
       <Header
-        title="Торренты и жалобы"
-        sub="Обнаружения и внешние обращения"
-        period={!isComplaint}
-        action={
-          isComplaint && (
-            <button className="button primary" onClick={() => setAdding(true)}>
-              <Plus size={20} />
-              Добавить жалобу
-            </button>
-          )
-        }
-      />
-      <Tabs
-        items={["Обнаружения", "Внешние жалобы"]}
-        value={tab}
-        onChange={(t) => {
-          setParams(t === "Внешние жалобы" ? { tab: "complaints" } : {});
-          setSelected("");
-        }}
+        title="Торренты"
+        sub="Срабатывания существующих правил BitTorrent на нодах"
       />
       <div className="stats three">
         <Stat
+          icon={<Server />}
+          label="Нод со сбором BitTorrent"
+          value={ready.length}
+          spark={false}
+        />
+        <Stat
           icon={<FileText />}
-          label={isComplaint ? "Новые жалобы" : "Событий"}
-          value={
-            isComplaint
-              ? rows.filter((r) => r.status === "new").length
-              : rows.length
-          }
+          label="Последние обнаружения"
+          value={data.detections.length}
+          spark={false}
         />
         <Stat
           icon={<Users />}
-          label={isComplaint ? "На проверке" : "Пользователей"}
-          value={
-            isComplaint
-              ? rows.filter((r) => r.status === "reviewed").length
-              : new Set(
-                  rows.map((r) => r.user).filter((r) => r !== "Не определён"),
-                ).size
-          }
-        />
-        <Stat
-          icon={isComplaint ? <CheckCircle /> : <Server />}
-          label={isComplaint ? "Закрыто" : "Нод"}
-          value={
-            isComplaint
-              ? rows.filter((r) => r.status === "closed").length
-              : new Set(rows.map((r) => r.node)).size
-          }
+          label="Пользователей в обнаружениях"
+          value={new Set(data.detections.map((r) => r.user)).size}
+          spark={false}
         />
       </div>
-      <div className="split event-split">
-        <div className="stack">
-          {!isComplaint && (
-            <Panel title="Обнаружения по времени">
-              <div className="event-bars">
-                {Array.from({ length: 48 }, (_, i) => {
-                  const count = rows.filter((_, j) => j % 48 === i).length;
-                  return (
-                    <div key={i} title={`${count} событий`}>
-                      <i
-                        style={{ height: count ? `${25 + count * 22}%` : "0%" }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="spread muted tiny">
-                <span>Начало периода</span>
-                <span>Сейчас</span>
-              </div>
-            </Panel>
-          )}
-          <Panel
-            title={isComplaint ? "Внешние жалобы" : "Последние обнаружения"}
-          >
-            <SearchBox
-              value={q}
-              onChange={setQ}
-              placeholder="Номер, пользователь, нода или IP"
-            />
-            <Table
-              rows={rows as (Row & { id: string })[]}
-              columns={isComplaint ? complaintCols : detectionCols}
-              onRow={(r) => setSelected(r.id)}
-              pageSize={8}
-            />
-          </Panel>
-        </div>
-        {record ? (
-          <Panel title={`${isComplaint ? "Жалоба" : "Событие"} ${record.id}`}>
-            <dl className="details">
-              {(isComplaint ? complaintCols : detectionCols)
-                .filter((c) => c.key !== "id")
-                .map((c) => (
-                  <div key={c.key}>
-                    <dt>{c.title}</dt>
-                    <dd>
-                      {c.key === "time"
-                        ? datetime(record.time)
-                        : String(record[c.key] ?? "—")}
-                    </dd>
-                  </div>
-                ))}
-            </dl>
-            <div className="notice-box amber">
-              <TriangleAlert />
-              <p>
-                {isComplaint
-                  ? "Сопоставление с пользователем требует журналов, времени и порта источника."
-                  : "Обнаружен признак BitTorrent. Распознавание не охватывает весь зашифрованный трафик."}
-              </p>
-            </div>
-            {isComplaint ? (
-              <>
-                <p className="muted">{record.body}</p>
-                <Link
-                  className="button primary full"
-                  to={"/complaints/" + record.id}
-                >
-                  Открыть жалобу
-                </Link>
-              </>
-            ) : (
-              <div className="notice-box">
-                <p>
-                  Признак: {record.evidence}
-                  <br />
-                  Уверенность: {record.confidence}
-                  <br />
-                  Автоматические блокировки отключены.
-                </p>
-              </div>
-            )}
-          </Panel>
-        ) : (
-          <Panel>
-            <Empty title="Событий пока нет" />
-          </Panel>
-        )}
-      </div>
-      {adding && (
-        <Modal title="Добавить внешнюю жалобу" onClose={() => setAdding(false)}>
-          <form onSubmit={submit}>
-            <div className="grid two">
-              {[
-                ["subject", "Тема"],
-                ["provider", "Отправитель"],
-                ["ip", "IP сервера"],
-                ["node", "Нода"],
-              ].map(([k, l]) => (
-                <label key={k}>
-                  {l}
-                  <input
-                    required={k !== "node"}
-                    maxLength={250}
-                    value={form[k as keyof typeof form]}
-                    onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-                  />
-                </label>
-              ))}
-            </div>
-            <label>
-              Исходный текст
-              <textarea
-                required
-                maxLength={10000}
-                rows={6}
-                value={form.body}
-                onChange={(e) => setForm({ ...form, body: e.target.value })}
-              />
-            </label>
-            {error && (
-              <p role="alert" className="red">
-                {error}
-              </p>
-            )}
-            <button className="button primary" disabled={busy}>
-              Сохранить жалобу
-            </button>
-          </form>
-        </Modal>
-      )}
+      <Panel title="Источники обнаружений">
+        {agents.map((n) => (
+          <div className="spread" key={n.id}>
+            <Link to={"/nodes/" + n.id}>{n.name}</Link>
+            <span>
+              {ready.includes(n)
+                ? "Сбор включён · журнал Xray"
+                : "Нет подтверждения сбора: проверьте агент, журнал и правило BitTorrent"}
+            </span>
+          </div>
+        ))}
+        <p className="footnote">
+          Событие появляется, когда журнал Xray подтверждает маршрут правила
+          protocol=bittorrent. Зашифрованный или нераспознанный BitTorrent может
+          не определяться. Монитор не меняет правила VPN.
+        </p>
+      </Panel>
+      <Panel title="Обнаружения">
+        <SearchBox
+          value={q}
+          onChange={setQ}
+          placeholder="Пользователь, нода или IP"
+        />
+        <RecordList kind="detection" q={q} />
+      </Panel>
     </>
   );
 }

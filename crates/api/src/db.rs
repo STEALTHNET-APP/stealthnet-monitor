@@ -75,6 +75,7 @@ pub async fn connect(url: &str) -> Result<AnyPool> {
         };
         save_record(&pool, "rule", "expiry", &serde_json::to_value(r)?, now()).await?;
     }
+    crate::inventory::indexes(&pool).await?;
     Ok(pool)
 }
 pub async fn setting(pool: &AnyPool, key: &str) -> Result<Option<String>> {

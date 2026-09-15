@@ -154,65 +154,72 @@ export function Alerts() {
           <div className="split rules-split">
             <Panel
               title="Список правил"
-              action={<span className="muted">{data.rules.length} правил</span>}
+              action={
+                <span className="muted">
+                  {data.rules.filter((r) => r.metric !== "complaint").length}{" "}
+                  правил
+                </span>
+              }
             >
               <div className="rule-list">
-                {data.rules.map((r) => {
-                  const Icon =
-                    (
-                      {
-                        expiry: CalendarClock,
-                        offline: Unplug,
-                        cpu: Cpu,
-                        ram: MemoryStick,
-                        disk: HardDrive,
-                        traffic: Activity,
-                        complaint: FileWarning,
-                        detection: ShieldAlert,
-                      } as Record<string, typeof Cpu>
-                    )[r.metric] || TriangleAlert;
-                  return (
-                    <div
-                      key={r.id}
-                      className={rule.id === r.id ? "selected" : ""}
-                    >
-                      <button
-                        className="rule-main"
-                        onClick={() => setRule({ ...r })}
+                {data.rules
+                  .filter((r) => r.metric !== "complaint")
+                  .map((r) => {
+                    const Icon =
+                      (
+                        {
+                          expiry: CalendarClock,
+                          offline: Unplug,
+                          cpu: Cpu,
+                          ram: MemoryStick,
+                          disk: HardDrive,
+                          traffic: Activity,
+                          complaint: FileWarning,
+                          detection: ShieldAlert,
+                        } as Record<string, typeof Cpu>
+                      )[r.metric] || TriangleAlert;
+                    return (
+                      <div
+                        key={r.id}
+                        className={rule.id === r.id ? "selected" : ""}
                       >
-                        <Icon
-                          size={29}
-                          className={r.severity === "critical" ? "red" : ""}
+                        <button
+                          className="rule-main"
+                          onClick={() => setRule({ ...r })}
+                        >
+                          <Icon
+                            size={29}
+                            className={r.severity === "critical" ? "red" : ""}
+                          />
+                          <span>
+                            <b>{r.name}</b>
+                            <small>{metricNames[r.metric]}</small>
+                          </span>
+                          <span>
+                            {r.metric === "offline"
+                              ? `${r.threshold} с без связи`
+                              : ["complaint", "detection"].includes(r.metric)
+                                ? "При поступлении события"
+                                : r.metric === "expiry"
+                                  ? `За ${[r.threshold, 3, 1].filter((v, i, a) => v <= r.threshold && a.indexOf(v) === i).join(", ")} дн. и при истечении`
+                                  : `Выше ${r.threshold} · ${r.duration} с`}
+                          </span>
+                          <span>
+                            <Send size={15} className="blue" /> Telegram
+                          </span>
+                        </button>
+                        <Switch
+                          label={"Включить " + r.name}
+                          value={r.enabled}
+                          onChange={(v) =>
+                            void saveRule({ ...r, enabled: v }).catch((e) =>
+                              toast(e.message),
+                            )
+                          }
                         />
-                        <span>
-                          <b>{r.name}</b>
-                          <small>{metricNames[r.metric]}</small>
-                        </span>
-                        <span>
-                          {r.metric === "offline"
-                            ? `${r.threshold} с без связи`
-                            : ["complaint", "detection"].includes(r.metric)
-                              ? "При поступлении события"
-                              : r.metric === "expiry"
-                                ? `За ${[r.threshold, 3, 1].filter((v, i, a) => v <= r.threshold && a.indexOf(v) === i).join(", ")} дн. и при истечении`
-                                : `Выше ${r.threshold} · ${r.duration} с`}
-                        </span>
-                        <span>
-                          <Send size={15} className="blue" /> Telegram
-                        </span>
-                      </button>
-                      <Switch
-                        label={"Включить " + r.name}
-                        value={r.enabled}
-                        onChange={(v) =>
-                          void saveRule({ ...r, enabled: v }).catch((e) =>
-                            toast(e.message),
-                          )
-                        }
-                      />
-                    </div>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
               </div>
             </Panel>
             <Panel title={rule.name} sub="Настройка правила уведомлений">
@@ -234,11 +241,13 @@ export function Alerts() {
                       setRule({ ...rule, metric: e.target.value })
                     }
                   >
-                    {Object.entries(metricNames).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
+                    {Object.entries(metricNames)
+                      .filter(([key]) => key !== "complaint")
+                      .map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 <label>
@@ -379,7 +388,6 @@ const events = [
   ["disk", "Мало места на диске"],
   ["traffic", "Порог трафика"],
   ["detection", "Торрент-обнаружения"],
-  ["complaint", "Внешние жалобы"],
   ["recovery", "Восстановление"],
 ];
 export function Telegram() {
@@ -919,7 +927,7 @@ export function Settings() {
               <dl className="details">
                 <div>
                   <dt>Версия</dt>
-                  <dd>0.1.2-dev</dd>
+                  <dd>0.1.3-dev</dd>
                 </div>
                 <div>
                   <dt>Режим</dt>
@@ -1034,7 +1042,7 @@ function Updates() {
           <Monitor size={45} />
           <div>
             <span className="muted">Установленная версия</span>
-            <h2>v0.1.2</h2>
+            <h2>v0.1.3</h2>
             <p>Первая тестовая версия</p>
           </div>
           <ArrowRight size={25} />
@@ -1110,7 +1118,9 @@ export function AddNode() {
   });
   const [name, setName] = useState(params.get("name") || "Frankfurt-02");
   const [address, setAddress] = useState(params.get("address") || "");
-  const [region, setRegion] = useState(params.get("region") || (demo ? "de" : "xx"));
+  const [region, setRegion] = useState(
+    params.get("region") || (demo ? "de" : "xx"),
+  );
   const [nodeSecret, setNodeSecret] = useState("");
   const [nodeImage, setNodeImage] = useState("");
   const [imageLoading, setImageLoading] = useState(false);
@@ -1122,20 +1132,26 @@ export function AddNode() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(false);
   const [newNode, setNewNode] = useState("");
-  const loadNodeImage = useCallback(async (overwrite = false, signal?: AbortSignal) => {
-    setImageLoading(true);
-    setImageError("");
-    try {
-      const release = demo
-        ? { image: "remnawave/node:3.4.1" }
-        : await api<{ image: string }>("/node-image/latest", { signal });
-      if (!signal?.aborted) setNodeImage((current) => overwrite || !current ? release.image : current);
-    } catch (e) {
-      if (!signal?.aborted) setImageError((e as Error).message);
-    } finally {
-      if (!signal?.aborted) setImageLoading(false);
-    }
-  }, [demo]);
+  const loadNodeImage = useCallback(
+    async (overwrite = false, signal?: AbortSignal) => {
+      setImageLoading(true);
+      setImageError("");
+      try {
+        const release = demo
+          ? { image: "remnawave/node:3.4.1" }
+          : await api<{ image: string }>("/node-image/latest", { signal });
+        if (!signal?.aborted)
+          setNodeImage((current) =>
+            overwrite || !current ? release.image : current,
+          );
+      } catch (e) {
+        if (!signal?.aborted) setImageError((e as Error).message);
+      } finally {
+        if (!signal?.aborted) setImageLoading(false);
+      }
+    },
+    [demo],
+  );
   useEffect(() => {
     if (mode !== "clean") {
       setImageLoading(false);
@@ -1368,7 +1384,9 @@ export function AddNode() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
-                <small id="server-name-help" className="footnote">Можно на русском, например «Нидерланды-01».</small>
+                <small id="server-name-help" className="footnote">
+                  Можно на русском, например «Нидерланды-01».
+                </small>
               </label>
               <label>
                 IP сервера (необязательно)
@@ -1377,7 +1395,10 @@ export function AddNode() {
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="IPv4 или IPv6"
                 />
-                <small className="footnote">Если оставить пустым, агент передаст публичный IP своего сетевого интерфейса.</small>
+                <small className="footnote">
+                  Если оставить пустым, агент передаст публичный IP своего
+                  сетевого интерфейса.
+                </small>
               </label>
               <label>
                 Регион
@@ -1414,15 +1435,36 @@ export function AddNode() {
                           value={nodeImage}
                           aria-describedby="node-image-help"
                           aria-busy={imageLoading}
-                          placeholder={imageLoading ? "Получаем актуальную версию…" : "remnawave/node:тег"}
+                          placeholder={
+                            imageLoading
+                              ? "Получаем актуальную версию…"
+                              : "remnawave/node:тег"
+                          }
                           onChange={(e) => setNodeImage(e.target.value)}
                         />
-                        <small id="node-image-help" className="footnote" aria-live="polite">
-                          {imageLoading ? "Проверяем официальный релиз…" : demo ? "Пример версии для демонстрации." : "Стабильная версия подставляется автоматически. Можно указать другую."}
+                        <small
+                          id="node-image-help"
+                          className="footnote"
+                          aria-live="polite"
+                        >
+                          {imageLoading
+                            ? "Проверяем официальный релиз…"
+                            : demo
+                              ? "Пример версии для демонстрации."
+                              : "Стабильная версия подставляется автоматически. Можно указать другую."}
                         </small>
                       </label>
-                      {imageError && <p className="red" role="alert">{imageError}</p>}
-                      <button type="button" className="button subtle" disabled={imageLoading} onClick={() => void loadNodeImage(true)}>
+                      {imageError && (
+                        <p className="red" role="alert">
+                          {imageError}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className="button subtle"
+                        disabled={imageLoading}
+                        onClick={() => void loadNodeImage(true)}
+                      >
                         <RefreshCw size={16} /> Подставить актуальную
                       </button>
                     </div>
@@ -1441,7 +1483,8 @@ export function AddNode() {
                   <p className="footnote">
                     Создайте ноду и выберите конфигурационный профиль в
                     Remnawave. Возьмите SECRET_KEY и NODE_PORT из выданного
-                    Docker Compose. Если вашей панели нужна определённая версия ноды, укажите её в поле образа.
+                    Docker Compose. Если вашей панели нужна определённая версия
+                    ноды, укажите её в поле образа.
                   </p>
                 </>
               )}
@@ -1481,7 +1524,10 @@ export function AddNode() {
               Выбран режим:{" "}
               {mode === "existing" ? "работающая нода" : "чистый сервер"}
             </span>
-            <button className="button primary" disabled={busy || (mode === "clean" && imageLoading)}>
+            <button
+              className="button primary"
+              disabled={busy || (mode === "clean" && imageLoading)}
+            >
               Продолжить <ArrowRight size={18} />
             </button>
           </Panel>

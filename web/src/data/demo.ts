@@ -1,4 +1,9 @@
 export type Node = {
+  collector_time?: number;
+  collector_connections?: boolean;
+  collector_sockets?: boolean;
+  collector_torrents?: boolean;
+  collector_sessions?: number;
   source?: "agent" | "remnawave";
   remnawave_id?: string;
   location_source?: string;
@@ -39,7 +44,13 @@ export type Rule = {
   severity: string;
 };
 export type Snapshot = {
-  geoip?: { available: boolean; provider: string; build_epoch: number | null; update_failed: boolean };
+  geoip?: {
+    asn_available?: boolean;
+    available: boolean;
+    provider: string;
+    build_epoch: number | null;
+    update_failed: boolean;
+  };
   nodes: Node[];
   users: Row[];
   connections: Row[];

@@ -15,6 +15,8 @@ use std::{
 struct Database {
     reader: Option<Reader<Vec<u8>>>,
     error: bool,
+    asn: Option<Reader<Vec<u8>>>,
+    asn_error: bool,
 }
 
 #[derive(Clone, Default)]
@@ -23,37 +25,63 @@ pub struct GeoIp(Arc<RwLock<Database>>);
 impl GeoIp {
     pub fn start(directory: PathBuf) -> Self {
         let result = Self::default();
-        let worker = result.clone();
-        tokio::spawn(async move {
-            let file = directory.join("dbip-city-lite.mmdb");
-            let read_file = file.clone();
-            if let Ok(Ok(reader)) =
-                tokio::task::spawn_blocking(move || Reader::open_readfile(read_file)).await
-            {
-                worker.0.write().unwrap().reader = Some(reader);
-            }
-            loop {
-                if let Err(error) = worker.update(&file).await {
-                    worker.0.write().unwrap().error = true;
-                    tracing::warn!(%error, "GeoIP database update failed; retaining previous database");
+        for kind in ["city", "asn"] {
+            let worker = result.clone();
+            let directory = directory.clone();
+            tokio::spawn(async move {
+                let file = directory.join(format!("dbip-{kind}-lite.mmdb"));
+                let read_file = file.clone();
+                if let Ok(Ok(reader)) =
+                    tokio::task::spawn_blocking(move || Reader::open_readfile(read_file)).await
+                {
+                    let mut db = worker.0.write().unwrap();
+                    if kind == "city" {
+                        db.reader = Some(reader);
+                    } else {
+                        db.asn = Some(reader);
+                    }
                 }
-                let delay = if worker.0.read().unwrap().reader.is_some() {
-                    6 * 3600
-                } else {
-                    60
-                };
-                tokio::time::sleep(Duration::from_secs(delay)).await;
-            }
-        });
+                loop {
+                    if worker.update(&file, kind).await.is_err() {
+                        let mut db = worker.0.write().unwrap();
+                        if kind == "city" {
+                            db.error = true;
+                        } else {
+                            db.asn_error = true;
+                        }
+                        tracing::warn!(
+                            kind,
+                            "IP database update failed; retaining previous database"
+                        );
+                    }
+                    let ready = {
+                        let db = worker.0.read().unwrap();
+                        if kind == "city" {
+                            db.reader.is_some()
+                        } else {
+                            db.asn.is_some()
+                        }
+                    };
+                    tokio::time::sleep(Duration::from_secs(if ready { 6 * 3600 } else { 60 }))
+                        .await;
+                }
+            });
+        }
         result
     }
 
-    async fn update(&self, file: &std::path::Path) -> anyhow::Result<()> {
+    async fn update(&self, file: &std::path::Path, kind: &'static str) -> anyhow::Result<()> {
         let month = Utc::now().format("%Y-%m").to_string();
         let stamp = file.with_extension("month");
-        if self.0.read().unwrap().reader.is_some()
-            && tokio::fs::read_to_string(&stamp).await.unwrap_or_default() == month
-        {
+        let ready = {
+            let db = self.0.read().unwrap();
+            if kind == "city" {
+                db.reader.is_some()
+            } else {
+                db.asn.is_some()
+            }
+        };
+        if ready && tokio::fs::read_to_string(&stamp).await.unwrap_or_default() == month {
             return Ok(());
         }
         let client = reqwest::Client::builder()
@@ -64,7 +92,7 @@ impl GeoIp {
             .build()?;
         let mut response = client
             .get(format!(
-                "https://download.db-ip.com/free/dbip-city-lite-{month}.mmdb.gz"
+                "https://download.db-ip.com/free/dbip-{kind}-lite-{month}.mmdb.gz"
             ))
             .send()
             .await?
@@ -93,8 +121,8 @@ impl GeoIp {
                     .metadata()
                     .database_type
                     .to_lowercase()
-                    .contains("city"),
-                "Expected a City database"
+                    .contains(kind),
+                "Unexpected IP database type"
             );
             let parent = file.parent().context("GeoIP directory missing")?;
             std::fs::create_dir_all(parent)?;
@@ -110,16 +138,21 @@ impl GeoIp {
         })
         .await??;
         let mut db = self.0.write().unwrap();
-        db.reader = Some(reader);
-        db.error = false;
-        tracing::info!("GeoIP City database ready");
+        if kind == "city" {
+            db.reader = Some(reader);
+            db.error = false;
+        } else {
+            db.asn = Some(reader);
+            db.asn_error = false;
+        }
+        tracing::info!(kind, "IP database ready");
         Ok(())
     }
 
     pub fn enrich(&self, rows: &mut [Value]) -> Value {
         let db = self.0.read().unwrap();
         if let Some(reader) = &db.reader {
-            for row in rows {
+            for row in rows.iter_mut() {
                 let Some(ip) = row["ip"]
                     .as_str()
                     .and_then(|s| s.parse::<IpAddr>().ok())
@@ -136,8 +169,43 @@ impl GeoIp {
                 apply_location(row, &record);
             }
         }
-        json!({"available":db.reader.is_some(),"provider":"DB-IP Lite","build_epoch":db.reader.as_ref().map(|r|r.metadata().build_epoch),"update_failed":db.error})
+        if let Some(reader) = &db.asn {
+            for row in rows {
+                if let Some(ip) = row["ip"]
+                    .as_str()
+                    .and_then(|s| s.parse::<IpAddr>().ok())
+                    .filter(public_ip)
+                {
+                    if let Ok(result) = reader.lookup(ip) {
+                        if let Ok(Some(record)) = result.decode::<Value>() {
+                            apply_network(row, &record);
+                        }
+                    }
+                }
+            }
+        }
+        json!({"asn_available":db.asn.is_some(),"asn_update_failed":db.asn_error,"available":db.reader.is_some(),"provider":"DB-IP Lite","build_epoch":db.reader.as_ref().map(|r|r.metadata().build_epoch),"update_failed":db.error})
     }
+}
+
+fn apply_network(row: &mut Value, record: &Value) {
+    let org = record["autonomous_system_organization"]
+        .as_str()
+        .unwrap_or("");
+    row["asn"] = record["autonomous_system_number"].clone();
+    row["network_operator"] = json!(org);
+    let name = org.to_lowercase();
+    // ASN organisation is a hint, not the access medium of an individual subscriber.
+    let hint = if ["mobile", "cellular"].iter().any(|s| name.contains(s)) {
+        "Мобильный оператор · предположительно"
+    } else if ["broadband", "cable"].iter().any(|s| name.contains(s)) {
+        "Фиксированный оператор · предположительно"
+    } else {
+        "Тип доступа не определён"
+    };
+    row["network_type"] = json!(hint);
+    row["network_source"] =
+        json!("DB-IP ASN Lite · оценка по названию оператора; Wi-Fi не определяется");
 }
 
 fn public_ip(ip: &IpAddr) -> bool {
@@ -220,6 +288,8 @@ mod tests {
         let geoip = GeoIp(Arc::new(RwLock::new(Database {
             reader: Some(reader),
             error: false,
+            asn: None,
+            asn_error: false,
         })));
         let mut rows = vec![
             json!({"ip":"89.160.20.128"}),

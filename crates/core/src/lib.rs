@@ -159,6 +159,18 @@ pub struct Telemetry {
     pub addresses: Vec<String>,
     #[serde(default)]
     pub events: Vec<Observation>,
+    #[serde(default)]
+    pub collector: Option<CollectorStatus>,
+    #[serde(default)]
+    pub interval_seconds: Option<f64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectorStatus {
+    pub time: i64,
+    pub connections: bool,
+    pub socket_counters: bool,
+    pub torrent_detection: bool,
+    pub tracked_sessions: u32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Observation {
@@ -170,6 +182,20 @@ pub struct Observation {
     pub evidence: String,
     #[serde(default)]
     pub protocol: Option<String>,
+    #[serde(default)]
+    pub first_seen: Option<i64>,
+    #[serde(default)]
+    pub last_activity: Option<i64>,
+    #[serde(default)]
+    pub source_port: Option<u16>,
+    #[serde(default)]
+    pub bytes_rx: Option<u64>,
+    #[serde(default)]
+    pub bytes_tx: Option<u64>,
+    #[serde(default)]
+    pub rtt_ms: Option<f64>,
+    #[serde(default)]
+    pub status: Option<String>,
 }
 impl Telemetry {
     pub fn validate(&self, clock: i64) -> Result<(), &'static str> {
@@ -194,6 +220,12 @@ impl Telemetry {
         {
             return Err("Метрика должна быть в диапазоне 0–100");
         }
+        if self
+            .interval_seconds
+            .is_some_and(|s| !s.is_finite() || !(0.0..=3600.0).contains(&s))
+        {
+            return Err("Неверный интервал измерения");
+        }
         if [self.rx_bytes_per_sec, self.tx_bytes_per_sec]
             .iter()
             .any(|v| !v.is_finite() || *v < 0. || *v > 1e15)
@@ -204,6 +236,17 @@ impl Telemetry {
             !["connection", "detection"].contains(&e.kind.as_str())
                 || e.id.len() > 100
                 || e.evidence.len() > 1000
+                || e.time > clock + 30_000
+                || e.time < clock - 86_400_000
+                || e.first_seen.is_some_and(|t| t <= 0 || t > e.time)
+                || e.last_activity.is_some_and(|t| t <= 0 || t > e.time)
+                || e.bytes_rx.is_some_and(|n| n > 1_000_000_000_000_000_000)
+                || e.bytes_tx.is_some_and(|n| n > 1_000_000_000_000_000_000)
+                || e.rtt_ms
+                    .is_some_and(|v| !v.is_finite() || !(0.0..=3_600_000.0).contains(&v))
+                || e.status
+                    .as_ref()
+                    .is_some_and(|s| !["online", "observed", "ended"].contains(&s.as_str()))
                 || e.user.as_ref().is_some_and(|v| v.len() > 250)
                 || e.protocol
                     .as_ref()
@@ -290,6 +333,8 @@ mod tests {
             version: "test".into(),
             addresses: vec![],
             events: vec![],
+            collector: None,
+            interval_seconds: None,
         };
         assert!(t.validate(now()).is_ok());
         t.cpu = f64::NAN;

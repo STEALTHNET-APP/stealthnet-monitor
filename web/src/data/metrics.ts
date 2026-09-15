@@ -8,7 +8,14 @@ export function metricSeries(
   now: number,
   nodeId?: string,
 ): [number, number | null][] {
-  const width = hours <= 1 ? 15000 : hours <= 24 ? 60000 : 300000;
+  const width =
+    metric === "users"
+      ? 300000
+      : hours <= 1
+        ? 15000
+        : hours <= 24
+          ? 60000
+          : 300000;
   const buckets = new Map<number, Map<string, [number, number]>>();
   for (const row of rows) {
     const time = Number(row.time),

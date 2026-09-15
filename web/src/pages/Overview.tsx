@@ -30,10 +30,12 @@ import { Chart } from "../components/Chart";
 import { NodeMap } from "../components/NodeMap";
 import { useStore } from "../data/store";
 import { fmt, datetime } from "../data/demo";
+import { useTraffic, volume } from "../data/inventory";
 import { connectionRegions, recentConnections } from "../data/geography";
 export function Overview() {
   const { data, demo } = useStore();
   const nav = useNavigate();
+  const dailyTraffic = useTraffic(24);
   const activeIncidents = data.incidents.filter((r) => r.status !== "resolved");
   const online = data.nodes.filter((n) => n.status === "online").length;
   const users = data.nodes.reduce((s, n) => s + (n.users || 0), 0);
@@ -82,7 +84,8 @@ export function Overview() {
         <Stat
           icon={<Database />}
           label="Трафик за сутки"
-          value={demo ? "126,4 ТБ" : "—"}
+          value={demo ? "126,4 ТБ" : volume(dailyTraffic?.total_bytes)}
+          note={demo ? undefined : "Собранные замеры агентов · 24 ч"}
         />
         <Stat
           icon={<TriangleAlert />}

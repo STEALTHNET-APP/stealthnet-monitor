@@ -26,12 +26,18 @@ export function Chart({
   seed = 1,
   compact = false,
   nodeId,
+  points: suppliedPoints,
+  label,
+  valueUnit,
 }: {
   height?: number;
   kind?: string;
   seed?: number;
   compact?: boolean;
   nodeId?: string;
+  points?: [number, number | null][];
+  label?: string;
+  valueUnit?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { period, demo, data } = useStore();
@@ -50,11 +56,14 @@ export function Chart({
               ? 168
               : 24;
     const metric = kind === "traffic" ? "rx" : kind;
-    let first: [number, number | null][] = demo
-      ? series(period, seed)
-      : metricSeries(data.metrics, metric, hours, data.updated_at, nodeId);
-    const names =
-      kind === "traffic"
+    let first: [number, number | null][] =
+      suppliedPoints ??
+      (demo
+        ? series(period, seed)
+        : metricSeries(data.metrics, metric, hours, data.updated_at, nodeId));
+    const names = suppliedPoints
+      ? [label || "Трафик пользователя"]
+      : kind === "traffic"
         ? ["Входящий", "Исходящий"]
         : [
             kind === "users"
@@ -68,13 +77,14 @@ export function Chart({
                     : "Задержка",
           ];
     const unit =
-      kind === "traffic"
+      valueUnit ??
+      (kind === "traffic"
         ? " Гбит/с"
         : ["cpu", "ram", "disk"].includes(kind)
           ? "%"
           : kind === "users"
             ? ""
-            : " мс";
+            : " мс");
     const scope = nodeId
       ? data.nodes.filter((n) => n.id === nodeId)
       : data.nodes;
@@ -94,9 +104,10 @@ export function Chart({
             ? total(kind as "cpu")
             : 25;
     const last = first.at(-1)?.[1] || 1;
-    const points = demo
-      ? first.map(([t, v]) => [t, ((v || 0) / last) * demoTarget])
-      : first;
+    const points =
+      demo && !suppliedPoints
+        ? first.map(([t, v]) => [t, ((v || 0) / last) * demoTarget])
+        : first;
     chart.setOption({
       animation: false,
       graphic: first.length
@@ -179,7 +190,8 @@ export function Chart({
       series: names.map((name, i) => ({
         name,
         type: "line",
-        showSymbol: false,
+        showSymbol: first.length <= 2,
+        symbolSize: 6,
         smooth: 0.15,
         lineStyle: { width: 1.65 },
         areaStyle: {
@@ -225,6 +237,9 @@ export function Chart({
     seed,
     compact,
     nodeId,
+    suppliedPoints,
+    label,
+    valueUnit,
   ]);
   return (
     <div
@@ -233,9 +248,11 @@ export function Chart({
       style={{ height }}
       role="img"
       aria-label={
-        kind === "traffic"
-          ? "График входящего и исходящего трафика. Наведите для точных значений."
-          : `График ${kind}`
+        suppliedPoints
+          ? `График: ${label || "Трафик пользователя"}`
+          : kind === "traffic"
+            ? "График входящего и исходящего трафика. Наведите для точных значений."
+            : `График ${kind}`
       }
     />
   );

@@ -68,6 +68,9 @@ print('yes' if not c.get('event_file') or c.get('event_file')=='/var/lib/stealth
 PY
 )
   if [[ "$COLLECTOR_ENABLED" == yes ]]; then
+   if ! command -v ss >/dev/null && command -v apt-get >/dev/null; then
+    apt-get update && apt-get install -y --no-install-recommends iproute2
+   fi
    install -d -m 755 /usr/local/lib/stealthnet-monitor
    install -d -o root -g stealthnet-agent -m 750 /var/lib/stealthnet-monitor-xray
    curl -fsSL --proto '=https' --tlsv1.2 "$PANEL/xray-collector.py" -o "$TMP_DIR/xray_collector.py"
@@ -88,8 +91,8 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/var/lib/stealthnet-monitor-xray
-RestrictAddressFamilies=AF_UNIX
-MemoryMax=64M
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+MemoryMax=192M
 CPUQuota=5%
 [Install]
 WantedBy=multi-user.target

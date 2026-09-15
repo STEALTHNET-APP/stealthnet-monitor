@@ -303,30 +303,40 @@ export function Table<T extends { id: string | number }>({
   columns,
   onRow,
   pageSize = 10,
+  remote,
+  emptyText,
 }: {
   rows: T[];
   columns: Column<T>[];
   onRow?: (r: T) => void;
   pageSize?: number;
+  remote?: { page: number; total: number; onPage: (page: number) => void };
+  emptyText?: string;
 }) {
-  const [page, setPage] = useState(1);
+  const [localPage, setLocalPage] = useState(1);
+  const page = remote?.page ?? localPage;
+  const setPage = remote?.onPage ?? setLocalPage;
+  const total = remote?.total ?? rows.length;
   const [sort, setSort] = useState("");
   const [desc, setDesc] = useState(false);
   const c = columns.find((x) => x.key === sort);
-  const sorted = c?.sort
-    ? [...rows].sort((a, b) => {
-        const av = c.sort!(a),
-          bv = c.sort!(b);
-        return (
-          (typeof av === "number" && typeof bv === "number"
-            ? av - bv
-            : String(av).localeCompare(String(bv), "ru")) * (desc ? -1 : 1)
-        );
-      })
-    : rows;
-  const last = Math.max(1, Math.ceil(rows.length / pageSize));
+  const sorted =
+    !remote && c?.sort
+      ? [...rows].sort((a, b) => {
+          const av = c.sort!(a),
+            bv = c.sort!(b);
+          return (
+            (typeof av === "number" && typeof bv === "number"
+              ? av - bv
+              : String(av).localeCompare(String(bv), "ru")) * (desc ? -1 : 1)
+          );
+        })
+      : rows;
+  const last = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(page, last);
-  const visible = sorted.slice((current - 1) * pageSize, current * pageSize);
+  const visible = remote
+    ? sorted
+    : sorted.slice((current - 1) * pageSize, current * pageSize);
   return (
     <div className="table-container">
       <div className="table-scroll">
@@ -335,7 +345,7 @@ export function Table<T extends { id: string | number }>({
             <tr>
               {columns.map((col) => (
                 <th key={col.key}>
-                  {col.sort ? (
+                  {col.sort && !remote ? (
                     <button
                       onClick={() => {
                         setSort(col.key);
@@ -384,14 +394,24 @@ export function Table<T extends { id: string | number }>({
             ))}
           </tbody>
         </table>
-        {!rows.length && <Empty />}
+        {!rows.length && (
+          <Empty
+            title={emptyText || "Нет данных"}
+            text={
+              emptyText === "Ничего не найдено"
+                ? "Попробуйте изменить запрос или фильтр."
+                : emptyText === "Загрузка…"
+                  ? "Загружаем записи."
+                  : undefined
+            }
+          />
+        )}
       </div>
-      {rows.length > pageSize && (
+      {total > pageSize && (
         <div className="pagination">
           <span>
             {fmt((current - 1) * pageSize + 1)}–
-            {fmt(Math.min(current * pageSize, rows.length))} из{" "}
-            {fmt(rows.length)}
+            {fmt(Math.min(current * pageSize, total))} из {fmt(total)}
           </span>
           <div>
             <button

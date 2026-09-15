@@ -18,3 +18,9 @@ test('resource percentages average nodes and missing intervals remain gaps', () 
  rows.push({node_id:'a',time:now-600000,metric:'cpu',value:10});
  assert.equal(metricSeries(rows,'cpu',1,now).filter(p=>p[1]===null).length,1);
 });
+test('five-minute online history forms a continuous series, including zero', () => {
+ const rows = [0,1,2].map(i=>({node_id:'a',time:now-i*300000,metric:'users',value:i===0?0:42}));
+ assert.equal(metricSeries(rows,'users',1,now).length,3);
+ assert.equal(metricSeries(rows,'users',1,now).at(-1)?.[1],0);
+ assert.ok(metricSeries(rows,'users',1,now).every(p=>p[1]!==null));
+});

@@ -1,11 +1,13 @@
 pub mod alerts;
 pub mod db;
 pub mod geoip;
+pub mod inventory;
 pub mod node_inventory;
 pub mod node_release;
 pub mod remnawave;
 pub mod secrets;
 pub mod telegram;
+pub mod traffic;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     Json, Router,
@@ -69,6 +71,10 @@ type Result<T> = std::result::Result<T, Error>;
 pub fn router(app: App, web: &str, downloads: &str) -> Router {
     let private = Router::new()
         .route("/snapshot", get(snapshot))
+        .route("/inventory-summary", get(inventory::summary))
+        .route("/traffic-summary", get(traffic::summary))
+        .route("/inventory/{kind}", get(inventory::list))
+        .route("/users/{id}/detail", get(inventory::detail))
         .route("/enrollments", post(enroll))
         .route("/node-image/latest", get(node_release::latest))
         .route("/enrollments/{id}", get(enrollment_status))
@@ -274,8 +280,10 @@ async fn logout(State(app): State<App>, headers: HeaderMap) -> Result<Response> 
 }
 async fn snapshot(State(app): State<App>) -> Result<Json<Value>> {
     let mut connections = db::records(&app.db, "connection", 1000).await?;
+    inventory::enrich_users(&app.db, &mut connections).await?;
     let geoip = app.geoip.enrich(&mut connections);
-    let mut metrics = Vec::new();
+    let nodes = db::nodes(&app.db).await?;
+    let mut metrics = inventory::online_metrics(&app.db, &nodes).await?;
     let rows = sqlx::query(
         "SELECT node_id,payload FROM telemetry WHERE time>$1 ORDER BY time DESC LIMIT 2000",
     )
@@ -296,7 +304,7 @@ async fn snapshot(State(app): State<App>) -> Result<Json<Value>> {
         }
     }
     Ok(Json(
-        json!({"mode":"live","updated_at":now(),"nodes":db::nodes(&app.db).await?,"users":db::records(&app.db,"user",5000).await?,"devices":db::records(&app.db,"device",5000).await?,"connections":connections,"geoip":geoip,"detections":db::records(&app.db,"detection",1000).await?,"incidents":db::records(&app.db,"incident",1000).await?,"complaints":db::records(&app.db,"complaint",1000).await?,"rules":db::records(&app.db,"rule",1000).await?,"deliveries":telegram::history(&app).await?,"metrics":metrics}),
+        json!({"mode":"live","updated_at":now(),"nodes":nodes,"users":db::records(&app.db,"user",5000).await?,"devices":db::records(&app.db,"device",5000).await?,"connections":connections,"geoip":geoip,"detections":db::records(&app.db,"detection",1000).await?,"incidents":db::records(&app.db,"incident",1000).await?,"complaints":db::records(&app.db,"complaint",1000).await?,"rules":db::records(&app.db,"rule",1000).await?,"deliveries":telegram::history(&app).await?,"metrics":metrics}),
     ))
 }
 async fn enroll(
@@ -396,7 +404,9 @@ async fn telemetry(
     let seen: i64 = r.get("last_seen");
     let mut node: Value = serde_json::from_str(&r.get::<String, _>("payload"))?;
     let mut tx = app.db.begin().await?;
-    let inserted=sqlx::query("INSERT INTO telemetry(id,node_id,time,payload) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING").bind(format!("{}:{}",id,sample.id)).bind(&id).bind(sample.time).bind(serde_json::to_string(&sample)?).execute(&mut *tx).await?.rows_affected()>0;
+    let mut metric_sample = sample.clone();
+    metric_sample.events.clear();
+    let inserted=sqlx::query("INSERT INTO telemetry(id,node_id,time,payload) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING").bind(format!("{}:{}",id,sample.id)).bind(&id).bind(sample.time).bind(serde_json::to_string(&metric_sample)?).execute(&mut *tx).await?.rows_affected()>0;
     if inserted && sample.time >= seen {
         for (k, v) in [
             ("cpu", sample.cpu),
@@ -410,6 +420,13 @@ async fn telemetry(
         node["last_seen"] = json!(sample.time);
         node["agent"] = json!(sample.version);
         node["hostname"] = json!(sample.hostname);
+        if let Some(c) = &sample.collector {
+            node["collector_time"] = json!(c.time);
+            node["collector_connections"] = json!(c.connections);
+            node["collector_sockets"] = json!(c.socket_counters);
+            node["collector_torrents"] = json!(c.torrent_detection);
+            node["collector_sessions"] = json!(c.tracked_sessions);
+        }
         node["addresses"] = json!(sample.addresses);
         if node["ip"]
             .as_str()
@@ -442,9 +459,28 @@ async fn telemetry(
     if inserted {
         for e in &sample.events {
             let event_id = format!("{id}:{}", e.id);
-            let payload = json!({"id":event_id,"user":e.user.as_deref().unwrap_or("Не определён"),"ip":e.ip,"region":"Не определён","node":node["name"],"node_id":id,"protocol":if e.kind=="detection"{"BitTorrent"}else{e.protocol.as_deref().unwrap_or("Не определён")},"evidence":e.evidence,"status":"new","time":e.time,"last_seen":e.time,"source":"Агент · журнал подключений","confidence":"Сигнал"});
+            let mut payload = json!({"id":event_id,"user":e.user.as_deref().unwrap_or("Не определён"),"ip":e.ip,"region":"Не определён","node":node["name"],"node_id":id,"protocol":if e.kind=="detection"{"BitTorrent"}else{e.protocol.as_deref().unwrap_or("Не определён")},"evidence":e.evidence,"status":"new","time":e.time,"last_seen":e.time,"source":"Агент · журнал подключений","confidence":"Сигнал"});
             if e.kind == "connection" {
-                sqlx::query("INSERT INTO records(kind,id,payload,time) VALUES($1,$2,$3,$4) ON CONFLICT(kind,id) DO UPDATE SET payload=excluded.payload,time=excluded.time WHERE records.time<excluded.time")
+                payload["first_seen"] = json!(e.first_seen);
+                payload["last_activity"] = json!(e.last_activity);
+                payload["source_port"] = json!(e.source_port);
+                payload["bytes_rx"] = json!(e.bytes_rx);
+                payload["bytes_tx"] = json!(e.bytes_tx);
+                payload["rtt_ms"] = json!(e.rtt_ms);
+                payload["status"] = json!(e.status.as_deref().unwrap_or("observed"));
+                payload["duration_seconds"] =
+                    json!(e.first_seen.map(|start| (e.time - start).max(0) / 1000));
+                payload["traffic"] = json!(
+                    e.bytes_rx
+                        .zip(e.bytes_tx)
+                        .map(|(rx, tx)| (rx + tx) as f64 / 1e6)
+                );
+                payload["traffic_scope"] = json!(if e.bytes_rx.is_some() {
+                    "TCP-канал · с начала наблюдения"
+                } else {
+                    "Счётчики канала недоступны"
+                });
+                sqlx::query("INSERT INTO records(kind,id,payload,time) VALUES($1,$2,$3,$4) ON CONFLICT(kind,id) DO UPDATE SET payload=excluded.payload,time=excluded.time WHERE records.time<=excluded.time")
                     .bind(&e.kind).bind(&event_id).bind(payload.to_string()).bind(e.time).execute(&app.db).await?;
                 continue;
             }

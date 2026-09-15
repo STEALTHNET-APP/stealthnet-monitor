@@ -57,13 +57,45 @@ const nav = [
     icon: TriangleAlert,
     section: "События",
   },
-  { url: "/torrents", text: "Торренты и жалобы", icon: FileText },
+  { url: "/torrents", text: "Торренты", icon: FileText },
 ];
 function Shell() {
   const { data, demo, setDemo, error, loading, refresh, notice } = useStore();
   const [mobile, setMobile] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchUsers, setSearchUsers] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [searchStatus, setSearchStatus] = useState("");
+  useEffect(() => {
+    if (demo || !query.trim()) {
+      setSearchUsers([]);
+      return;
+    }
+    const controller = new AbortController();
+    setSearchStatus("Поиск…");
+    const timer = setTimeout(() => {
+      api<{ rows: { id: string; name: string }[] }>(
+        "/inventory/user?limit=8&q=" + encodeURIComponent(query),
+        { signal: controller.signal },
+      )
+        .then((v) => {
+          setSearchUsers(v.rows);
+          setSearchStatus("");
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setSearchUsers([]);
+            setSearchStatus("Не удалось выполнить поиск");
+          }
+        });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, demo]);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,7 +126,7 @@ function Shell() {
       to: "/nodes/" + n.id,
       type: "Нода",
     })),
-    ...data.users.map((u) => ({
+    ...(demo ? data.users : searchUsers).map((u) => ({
       id: String(u.id),
       name: String(u.name),
       to: "/users/" + u.id,
@@ -219,7 +251,14 @@ function Shell() {
                     <small>{r.type}</small>
                   </Link>
                 ))}
-                {!results.length && <p>Совпадений не найдено</p>}
+                {searchStatus && !demo ? (
+                  <p>{searchStatus}</p>
+                ) : (
+                  !results.length && <p>Совпадений не найдено</p>
+                )}
+                <Link to={"/connections?q=" + encodeURIComponent(query)}>
+                  Искать среди подключений →
+                </Link>
               </div>
             )}
           </div>
@@ -318,9 +357,9 @@ function Shell() {
           )}
           <footer className="app-footer">
             <span>
-              stealthnet-monitor <b>0.1.2</b>
+              stealthnet-monitor <b>0.1.3</b>
             </span>
-            {!demo && data.geoip?.available && (
+            {!demo && (data.geoip?.available || data.geoip?.asn_available) && (
               <a href="https://db-ip.com" target="_blank" rel="noreferrer">
                 IP Geolocation by DB-IP
               </a>

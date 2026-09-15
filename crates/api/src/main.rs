@@ -67,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
         secrets: Secrets::new(key.trim())?,
         http: reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .user_agent("stealthnet-monitor")
             .timeout(std::time::Duration::from_secs(15))
             .build()?,
         public_url,
@@ -95,9 +96,20 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
+    let inventory = app.clone();
+    tokio::spawn(async move {
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            timer.tick().await;
+            if remnawave::sync_nodes(&inventory).await.is_err() {
+                tracing::warn!("Remnawave node refresh unavailable");
+            }
+        }
+    });
     let sync = app.clone();
     tokio::spawn(async move {
-        let mut timer = tokio::time::interval(std::time::Duration::from_secs(60));
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(300));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             timer.tick().await;
@@ -125,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
                 let cutoff = stealthnet_core::now() - days * 86400000;
                 for sql in [
                     "DELETE FROM telemetry WHERE time<$1",
+                    "DELETE FROM records WHERE kind IN ('node_online','user_traffic') AND time<$1",
                     "DELETE FROM deliveries WHERE time<$1 AND status IN ('delivered','failed')",
                     "DELETE FROM records WHERE time<$1 AND kind IN ('connection','detection')",
                 ] {

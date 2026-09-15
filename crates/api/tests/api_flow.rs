@@ -10,6 +10,152 @@ use stealthnet_api::{App, alerts, db, router, secrets::Secrets};
 use stealthnet_core::{Telemetry, now};
 use tokio::sync::Mutex;
 use tower::ServiceExt;
+
+#[tokio::test]
+async fn traffic_uses_measured_intervals_and_online_history_links_physical_nodes() {
+    let a = app().await;
+    let time = now();
+    for (i, seconds) in [(0, Some(15.0)), (1, Some(15.0)), (2, None)] {
+        let mut value = sample(10.);
+        value.time = time - (2 - i) * 300000;
+        value.rx_bytes_per_sec = 100.;
+        value.tx_bytes_per_sec = 200.;
+        value.interval_seconds = seconds;
+        sqlx::query("INSERT INTO telemetry(id,node_id,time,payload) VALUES($1,'agent-1',$2,$3)")
+            .bind(format!("metric-{i}"))
+            .bind(value.time)
+            .bind(serde_json::to_string(&value).unwrap())
+            .execute(&a.db)
+            .await
+            .unwrap();
+    }
+    let traffic = stealthnet_api::traffic::totals(&a, 24).await.unwrap();
+    assert_eq!(traffic["rx_bytes"], 3000.);
+    assert_eq!(traffic["tx_bytes"], 6000.); // Five-minute unmeasured gap is excluded.
+    db::save_record(
+        &a.db,
+        "node_online",
+        "online",
+        &json!({"node_id":"remna-1","value":42}),
+        time,
+    )
+    .await
+    .unwrap();
+    let metrics = stealthnet_api::inventory::online_metrics(
+        &a.db,
+        &[json!({"id":"agent-1","remnawave_id":"remna-1"})],
+    )
+    .await
+    .unwrap();
+    assert_eq!(metrics[0]["node_id"], "agent-1");
+    assert_eq!(metrics[0]["metric"], "users");
+    assert_eq!(metrics[0]["value"], 42.);
+}
+
+#[tokio::test]
+async fn inventory_search_resolves_names_and_profile_uses_all_saved_records() {
+    let a = app().await;
+    let token = admin(&a).await;
+    for (kind, id, payload) in [
+        (
+            "user",
+            "user-1",
+            json!({"id":"user-1","name":"Example_User_A","remna_id":781,"traffic":1.5}),
+        ),
+        (
+            "user",
+            "user-2",
+            json!({"id":"user-2","name":"ExampleXUser_A","remna_id":782}),
+        ),
+        (
+            "connection",
+            "c1",
+            json!({"id":"c1","user":"781","ip":"1.1.1.1","node":"NL","time":10}),
+        ),
+        (
+            "connection",
+            "c2",
+            json!({"id":"c2","user":"user-1","ip":"1.0.0.1","node":"NL","time":11}),
+        ),
+        (
+            "connection",
+            "c3",
+            json!({"id":"c3","user":"782","ip":"8.8.8.8","node":"DE","time":12}),
+        ),
+        (
+            "device",
+            "d1",
+            json!({"id":"d1","user":"user-1","hwid":"a","os":"Android"}),
+        ),
+        (
+            "device",
+            "d2",
+            json!({"id":"d2","user":"781","hwid":"b","os":"Windows"}),
+        ),
+    ] {
+        db::save_record(&a.db, kind, id, &payload, now())
+            .await
+            .unwrap();
+    }
+    let r = router(a.clone(), "/tmp/no-web", "/tmp/no-downloads");
+    assert_eq!(
+        request(
+            &r,
+            "GET",
+            "/api/inventory/connection?q=Example_User_A",
+            Value::Null,
+            None,
+            None
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, page) = request(
+        &r,
+        "GET",
+        "/api/inventory/connection?q=example_user_a&limit=1",
+        Value::Null,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(page["total"], 2); // '_' is literal, and numeric/UUID references both match.
+    assert_eq!(page["rows"].as_array().unwrap().len(), 1);
+    assert_eq!(page["rows"][0]["user_name"], "Example_User_A");
+    let (_, profile) = request(
+        &r,
+        "GET",
+        "/api/users/user-1/detail",
+        Value::Null,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(profile["user"]["connections"], 2, "{profile}");
+    assert_eq!(profile["user"]["devices"], 2);
+    let (_, devices) = request(
+        &r,
+        "GET",
+        "/api/inventory/device?user_id=user-1",
+        Value::Null,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(devices["total"], 2);
+    let (_, empty) = request(
+        &r,
+        "GET",
+        "/api/inventory/connection?q=%25",
+        Value::Null,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(empty["total"], 0);
+}
 async fn app() -> App {
     App {
         db: db::connect("sqlite::memory:").await.unwrap(),
@@ -78,6 +224,8 @@ fn sample(cpu: f64) -> Telemetry {
         version: "0.1.0".into(),
         addresses: vec![],
         events: vec![],
+        collector: None,
+        interval_seconds: None,
     }
 }
 #[tokio::test]
@@ -325,7 +473,12 @@ async fn remnawave_sync_only_reads_upstream_and_preserves_cache_on_partial_failu
             {
                 json!({"response":{"users":[{"uuid":"user-500","username":"client-500","status":"ACTIVE"}]}})
             }
-            ("GET", "/api/hwid/devices?start=0&size=500") => json!({"response":{"devices":[]}}),
+            ("GET", "/api/hwid/devices?start=0&size=500") => {
+                json!({"response":{"total":501,"devices":(0..500).map(|i|json!({"hwid":format!("hw-{i}"),"userUuid":"user-0","platform":"Android"})).collect::<Vec<_>>()}})
+            }
+            ("GET", "/api/hwid/devices?start=500&size=500") => {
+                json!({"response":{"total":501,"devices":[{"hwid":"last-device","userUuid":"user-500","platform":"Windows"}]}})
+            }
             _ => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -362,6 +515,11 @@ async fn remnawave_sync_only_reads_upstream_and_preserves_cache_on_partial_failu
     .unwrap();
     let result = remnawave::sync(&app).await.unwrap();
     assert_eq!(result["users"], 501);
+    assert_eq!(result["devices"], 501);
+    assert_eq!(
+        db::records(&app.db, "device", 1000).await.unwrap().len(),
+        501
+    );
     let local_users = db::records(&app.db, "user", 1000).await.unwrap();
     assert_eq!(local_users.len(), 501);
     assert!(
@@ -374,7 +532,7 @@ async fn remnawave_sync_only_reads_upstream_and_preserves_cache_on_partial_failu
     assert!(remnawave::sync(&app).await.is_err());
     assert_eq!(db::records(&app.db, "user", 1000).await.unwrap().len(), 501);
     let seen = upstream.requests.lock().await;
-    assert_eq!(seen.len(), 7);
+    assert_eq!(seen.len(), 8);
     assert!(seen.iter().all(|(method, path)| {
         method == "GET"
             && [
@@ -382,6 +540,7 @@ async fn remnawave_sync_only_reads_upstream_and_preserves_cache_on_partial_failu
                 "/api/users?start=0&size=500",
                 "/api/users?start=500&size=500",
                 "/api/hwid/devices?start=0&size=500",
+                "/api/hwid/devices?start=500&size=500",
             ]
             .contains(&path.as_str())
     }));

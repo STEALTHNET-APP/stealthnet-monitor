@@ -121,6 +121,7 @@ async fn main() -> Result<()> {
         let sample = Telemetry {
             id: uuid::Uuid::new_v4().to_string(),
             time: now(),
+            interval_seconds: (elapsed <= 3600.).then_some(elapsed),
             cpu: sys.global_cpu_usage() as f64,
             ram: sys.used_memory() as f64 / sys.total_memory().max(1) as f64 * 100.,
             disk,
@@ -154,6 +155,13 @@ async fn main() -> Result<()> {
                 .take(32)
                 .map(|ip| ip.to_string())
                 .collect(),
+            collector: cfg.event_file.as_ref().and_then(|p| {
+                let path = Path::new(p).parent()?.join("status.json");
+                if std::fs::metadata(&path).ok()?.len() > 4096 {
+                    return None;
+                }
+                serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+            }),
             events: cfg
                 .event_file
                 .as_ref()
