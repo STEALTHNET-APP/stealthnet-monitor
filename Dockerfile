@@ -15,6 +15,7 @@ RUN cargo build --release --locked -j 1 --workspace
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* && useradd --system --uid 10001 --home /data stealthnet
 WORKDIR /app
+RUN mkdir -p /app/geoip && chown 10001:10001 /app/geoip
 COPY --from=rust /build/target/release/stealthnet-api /usr/local/bin/stealthnet-api
 COPY --from=rust /build/target/release/stealthnet-agent /tmp/stealthnet-agent
 RUN mkdir -p /app/downloads && ARCH=$(uname -m) && mv /tmp/stealthnet-agent /app/downloads/stealthnet-agent-linux-$ARCH && cd /app/downloads && sha256sum stealthnet-agent-linux-$ARCH > stealthnet-agent-linux-$ARCH.sha256

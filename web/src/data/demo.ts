@@ -39,6 +39,7 @@ export type Rule = {
   severity: string;
 };
 export type Snapshot = {
+  geoip?: { available: boolean; provider: string; build_epoch: number | null; update_failed: boolean };
   nodes: Node[];
   users: Row[];
   connections: Row[];

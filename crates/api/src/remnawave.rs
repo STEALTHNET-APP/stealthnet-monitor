@@ -95,6 +95,8 @@ async fn sync_inner(app: &App, c: &Config) -> Result<Value, Error> {
         let rows = page["users"]
             .as_array()
             .ok_or_else(|| Error::bad("Формат пользователей Remnawave не поддерживается"))?;
+        // Commit a page together instead of an fsync per user on large installations.
+        let mut tx = app.db.begin().await?;
         for u in rows {
             let id = u["uuid"]
                 .as_str()
@@ -111,8 +113,10 @@ async fn sync_inner(app: &App, c: &Config) -> Result<Value, Error> {
                 .and_then(|n| n["name"].as_str())
                 .unwrap_or("—");
             let payload = json!({"id":id,"remna_id":u["id"],"name":u["username"],"status":match u["status"].as_str(){Some("ACTIVE")=>"Учётная запись активна",Some("DISABLED")=>"Отключена",Some("EXPIRED")=>"Истекла",_=>"Не определён"},"connections":null,"devices":null,"traffic":traffic["usedTrafficBytes"].as_f64().map(|v|v/1e9),"node":node_name,"region":"—","last_seen":timestamp(&traffic["onlineAt"]),"source":"Remnawave API","synced_at":sync_time});
-            db::save_record(&app.db, "user", &id, &payload, sync_time).await?;
+            sqlx::query("INSERT INTO records(kind,id,payload,time) VALUES('user',$1,$2,$3) ON CONFLICT(kind,id) DO UPDATE SET payload=excluded.payload,time=excluded.time")
+                .bind(&id).bind(payload.to_string()).bind(sync_time).execute(&mut *tx).await?;
         }
+        tx.commit().await?;
         users += rows.len();
         if rows.len() < 500 {
             break;

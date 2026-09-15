@@ -1455,6 +1455,13 @@ tr.clickable:hover td {
   font-size: 10px;
   color: #b8c9da;
 }
+.map-observations {
+  padding: 9px 13px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: #16212b;
+  border-top: 1px solid #2c3d49;
+}
 .map-legend > span {
   display: flex;
   align-items: center;

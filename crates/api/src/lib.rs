@@ -1,5 +1,6 @@
 pub mod alerts;
 pub mod db;
+pub mod geoip;
 pub mod node_inventory;
 pub mod node_release;
 pub mod remnawave;
@@ -29,6 +30,7 @@ pub struct App {
     pub password_hash: Arc<String>,
     pub logins: Arc<Mutex<Vec<i64>>>,
     pub sync_lock: Arc<Mutex<()>>,
+    pub geoip: geoip::GeoIp,
 }
 #[derive(Debug)]
 pub struct Error(pub StatusCode, pub String);
@@ -271,6 +273,8 @@ async fn logout(State(app): State<App>, headers: HeaderMap) -> Result<Response> 
         .into_response())
 }
 async fn snapshot(State(app): State<App>) -> Result<Json<Value>> {
+    let mut connections = db::records(&app.db, "connection", 1000).await?;
+    let geoip = app.geoip.enrich(&mut connections);
     let mut metrics = Vec::new();
     let rows = sqlx::query(
         "SELECT node_id,payload FROM telemetry WHERE time>$1 ORDER BY time DESC LIMIT 2000",
@@ -292,7 +296,7 @@ async fn snapshot(State(app): State<App>) -> Result<Json<Value>> {
         }
     }
     Ok(Json(
-        json!({"mode":"live","updated_at":now(),"nodes":db::nodes(&app.db).await?,"users":db::records(&app.db,"user",5000).await?,"devices":db::records(&app.db,"device",5000).await?,"connections":db::records(&app.db,"connection",1000).await?,"detections":db::records(&app.db,"detection",1000).await?,"incidents":db::records(&app.db,"incident",1000).await?,"complaints":db::records(&app.db,"complaint",1000).await?,"rules":db::records(&app.db,"rule",1000).await?,"deliveries":telegram::history(&app).await?,"metrics":metrics}),
+        json!({"mode":"live","updated_at":now(),"nodes":db::nodes(&app.db).await?,"users":db::records(&app.db,"user",5000).await?,"devices":db::records(&app.db,"device",5000).await?,"connections":connections,"geoip":geoip,"detections":db::records(&app.db,"detection",1000).await?,"incidents":db::records(&app.db,"incident",1000).await?,"complaints":db::records(&app.db,"complaint",1000).await?,"rules":db::records(&app.db,"rule",1000).await?,"deliveries":telegram::history(&app).await?,"metrics":metrics}),
     ))
 }
 async fn enroll(

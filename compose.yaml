@@ -28,6 +28,9 @@ services:
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       BIND_ADDR: 0.0.0.0:8787
       DATA_DIR: /tmp/stealthnet
+      GEOIP_DIR: /app/geoip
+    volumes:
+      - geoip_data:/app/geoip
     ports:
       - "127.0.0.1:${LOCAL_PORT:-8787}:8787"
     depends_on:
@@ -68,3 +71,4 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  geoip_data:

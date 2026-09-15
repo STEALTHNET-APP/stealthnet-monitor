@@ -19,6 +19,7 @@ async fn app() -> App {
         password_hash: Arc::new(String::new()),
         logins: Arc::new(Mutex::new(vec![])),
         sync_lock: Arc::new(Mutex::new(())),
+        geoip: Default::default(),
     }
 }
 async fn request(

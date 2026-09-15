@@ -118,6 +118,9 @@ pub async fn queue(
     Ok(true)
 }
 pub async fn deliver(app: &App) -> anyhow::Result<()> {
+    deliver_to(app, "https://api.telegram.org").await
+}
+async fn deliver_to(app: &App, base: &str) -> anyhow::Result<()> {
     let c = config(app).await?;
     if c.token.is_empty() {
         return Ok(());
@@ -132,29 +135,22 @@ pub async fn deliver(app: &App) -> anyhow::Result<()> {
         if let Some(node) = p["node_id"].as_str() {
             body["reply_markup"] = json!({"inline_keyboard":[[{"text":"Открыть ноду","url":format!("{}/nodes/{}",app.public_url,node)}]]});
         }
-        let (status, delay, error) = match call(
-            &app.http,
-            "https://api.telegram.org",
-            &c.token,
-            "sendMessage",
-            body,
-        )
-        .await
-        {
-            Ok(_) => ("delivered", 0, String::new()),
-            Err(e) => {
-                let delay = e.retry_after.max((2_i64.pow(attempt.min(8) as u32)) * 5);
-                (
-                    if e.permanent || attempt >= 8 {
-                        "failed"
-                    } else {
-                        "retry"
-                    },
-                    delay,
-                    e.reason,
-                )
-            }
-        };
+        let (status, delay, error) =
+            match call(&app.http, base, &c.token, "sendMessage", body).await {
+                Ok(_) => ("delivered", 0, String::new()),
+                Err(e) => {
+                    let delay = e.retry_after.max((2_i64.pow(attempt.min(8) as u32)) * 5);
+                    (
+                        if e.permanent || attempt >= 8 {
+                            "failed"
+                        } else {
+                            "retry"
+                        },
+                        delay,
+                        e.reason,
+                    )
+                }
+            };
         sqlx::query(
             "UPDATE deliveries SET status=$1,attempts=$2,next_at=$3,last_error=$4 WHERE id=$5",
         )
@@ -176,6 +172,57 @@ pub async fn history(app: &App) -> anyhow::Result<Vec<Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn queued_notification_is_delivered_while_remnawave_lock_is_held() {
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+        let app = App {
+            db: db::connect("sqlite::memory:").await.unwrap(),
+            secrets: crate::secrets::Secrets::new(&crate::secrets::Secrets::generate()).unwrap(),
+            http: reqwest::Client::new(),
+            public_url: "https://monitor.example.com".into(),
+            password_hash: Arc::new(String::new()),
+            logins: Arc::new(Mutex::new(vec![])),
+            sync_lock: Arc::new(Mutex::new(())),
+            geoip: Default::default(),
+        };
+        save(
+            &app,
+            &Config {
+                token: "synthetic-token".into(),
+                chat_id: "42".into(),
+                enabled: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            queue(&app, "test", "Test", "Test", None, true)
+                .await
+                .unwrap()
+        );
+        let server = axum::Router::new().route(
+            "/botsynthetic-token/sendMessage",
+            axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                assert_eq!(body["chat_id"], "42");
+                axum::Json(json!({"ok":true,"result":{"message_id":1}}))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
+        let _sync_in_progress = app.sync_lock.lock().await;
+        tokio::time::timeout(std::time::Duration::from_secs(2), deliver_to(&app, &base))
+            .await
+            .unwrap()
+            .unwrap();
+        let rows = history(&app).await.unwrap();
+        assert_eq!(rows[0]["status"], "delivered");
+        assert_eq!(rows[0]["attempts"], 1);
+        assert!(!rows[0].to_string().contains("synthetic-token"));
+        task.abort();
+    }
     #[tokio::test]
     async fn obeys_retry_after_and_does_not_leak_token() {
         let app = axum::Router::new().route(

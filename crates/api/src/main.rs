@@ -78,21 +78,43 @@ async fn main() -> anyhow::Result<()> {
         ),
         logins: Arc::new(Mutex::new(vec![])),
         sync_lock: Arc::new(Mutex::new(())),
+        geoip: stealthnet_api::geoip::GeoIp::start(PathBuf::from(
+            std::env::var("GEOIP_DIR")
+                .unwrap_or_else(|_| data.join("geoip").to_string_lossy().into_owned()),
+        )),
     };
+    // Independent loops: a large Remnawave import must never delay Telegram delivery.
+    let delivery = app.clone();
+    tokio::spawn(async move {
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(3));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            timer.tick().await;
+            if telegram::deliver(&delivery).await.is_err() {
+                tracing::warn!("delivery worker failed");
+            }
+        }
+    });
+    let sync = app.clone();
+    tokio::spawn(async move {
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(60));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            timer.tick().await;
+            if remnawave::sync(&sync).await.is_err() {
+                tracing::warn!("Remnawave synchronization unavailable");
+            }
+        }
+    });
     let worker = app.clone();
     tokio::spawn(async move {
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(15));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut tick = 0;
         loop {
             timer.tick().await;
             if alerts::evaluate(&worker).await.is_err() {
-                tracing::warn!("alert evaluation failed")
-            }
-            if telegram::deliver(&worker).await.is_err() {
-                tracing::warn!("delivery worker failed")
-            }
-            if tick % 4 == 0 && remnawave::sync(&worker).await.is_err() {
-                tracing::warn!("Remnawave synchronization unavailable")
+                tracing::warn!("alert evaluation failed");
             }
             if tick % 240 == 0 {
                 let days = std::env::var("RETENTION_DAYS")

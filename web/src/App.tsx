@@ -318,8 +318,13 @@ function Shell() {
           )}
           <footer className="app-footer">
             <span>
-              stealthnet-monitor <b>0.1.1</b>
+              stealthnet-monitor <b>0.1.2</b>
             </span>
+            {!demo && data.geoip?.available && (
+              <a href="https://db-ip.com" target="_blank" rel="noreferrer">
+                IP Geolocation by DB-IP
+              </a>
+            )}
             <span>
               {demo
                 ? "Демонстрационные данные"

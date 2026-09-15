@@ -25,7 +25,7 @@ rollback:
 test:
 	cargo test --workspace --locked
 	python3 -m unittest discover -s scripts/tests
-	node --test web/tests/metrics.test.ts
+	node --test web/tests/*.test.ts
 	npm --prefix web run build
 	bash -n scripts/*.sh
 dev-api:

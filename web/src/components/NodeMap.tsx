@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Modal, Badge } from "./ui";
+import { Modal, Badge, Table } from "./ui";
 import { geoMercator, geoNaturalEarth1, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import { Plus, Minus, LocateFixed, Layers, Info } from "lucide-react";
-import { Node } from "../data/demo";
+import { Node, Row, datetime } from "../data/demo";
+import {
+  connectionRegions,
+  clusterConnectionRegions,
+  recentConnections,
+  type ConnectionRegion,
+} from "../data/geography";
 import { useStore } from "../data/store";
 export function NodeMap({
   nodes,
@@ -26,7 +32,16 @@ export function NodeMap({
   const [hover, setHover] = useState<Node>();
   const [cluster, setCluster] = useState<Node[]>([]);
   const [geoError, setGeoError] = useState(false);
-  const { demo } = useStore();
+  const [connectionHover, setConnectionHover] = useState<ConnectionRegion>();
+  const [connectionDetail, setConnectionDetail] = useState<ConnectionRegion>();
+  const { demo, data, period } = useStore();
+  const liveRows = recentConnections(
+    data.connections,
+    period,
+    data.updated_at,
+    selected,
+  );
+  const liveRegions = connectionRegions(liveRows, nodes);
   useEffect(() => {
     fetch("/data/countries-50m.json")
       .then((r) => r.json())
@@ -41,6 +56,11 @@ export function NodeMap({
     [world],
   );
   const path = geoPath(projection);
+  const visibleRegions = clusterConnectionRegions(
+    liveRegions,
+    projection,
+    zoom,
+  );
   const focus = selected || nodes[0];
   const regions = [
     ...(world
@@ -333,12 +353,93 @@ export function NodeMap({
                     stroke="#16232d"
                     strokeWidth={3 / zoom}
                   >
-                    {active ? focus?.name : n.city}
+                    {active
+                      ? focus?.name
+                      : n.city === "Город не указан"
+                        ? n.country
+                        : n.city}
                   </text>
                 )}
               </g>
             );
           })}
+          {connections &&
+            !demo &&
+            visibleRegions.map((region, i) => {
+              const b = projection([region.lon, region.lat]);
+              const a =
+                region.node.code !== "xx"
+                  ? projection([region.node.lon, region.node.lat])
+                  : null;
+              if (!b || !b.every(Number.isFinite)) return null;
+              const label = `${region.name}, ${region.country}: ${region.ips.size} IP, ${region.users.size} пользователей → ${region.node.name}`;
+              return (
+                <g key={region.id}>
+                  {a && a.every(Number.isFinite) && (
+                    <path
+                      d={`M${b} Q${(a[0] + b[0]) / 2},${Math.min(a[1], b[1]) - 45} ${a}`}
+                      fill="none"
+                      stroke="#5ca8fa"
+                      opacity={connectionHover?.id === region.id ? 1 : 0.35}
+                      strokeWidth={1.5 / zoom}
+                      pointerEvents="none"
+                    />
+                  )}
+                  <g
+                    role="button"
+                    tabIndex={0}
+                    aria-label={label}
+                    style={{ cursor: "pointer" }}
+                    pointerEvents="bounding-box"
+                    onClick={() => setConnectionDetail(region)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setConnectionDetail(region);
+                      }
+                    }}
+                    onMouseEnter={() => setConnectionHover(region)}
+                    onMouseLeave={() => setConnectionHover(undefined)}
+                    onFocus={() => setConnectionHover(region)}
+                    onBlur={() => setConnectionHover(undefined)}
+                  >
+                    <circle
+                      cx={b[0]}
+                      cy={b[1]}
+                      r={14 / zoom}
+                      fill="#163849"
+                      stroke="#5abafa"
+                      strokeWidth={2 / zoom}
+                    />
+                    <text
+                      x={b[0]}
+                      y={b[1]}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={10 / zoom}
+                      fontWeight="700"
+                      fill="#d5edff"
+                    >
+                      {region.ips.size}
+                    </text>
+                    <title>{label} · приблизительное положение</title>
+                    {labels && i < 8 && (
+                      <text
+                        x={b[0] + 18 / zoom}
+                        y={b[1] - 12 / zoom}
+                        fontSize={12 / zoom}
+                        fill="#b8c9da"
+                        paintOrder="stroke"
+                        stroke="#16232d"
+                        strokeWidth={3 / zoom}
+                      >
+                        {region.name}
+                      </text>
+                    )}
+                  </g>
+                </g>
+              );
+            })}
         </g>
       </svg>
       {!world && geo && (
@@ -410,17 +511,87 @@ export function NodeMap({
           </span>
         </div>
       )}
+      {connectionHover && (
+        <div className="map-tooltip">
+          <b>
+            {connectionHover.name} · {connectionHover.country}
+          </b>
+          <span>
+            {connectionHover.ips.size} IP · {connectionHover.users.size}{" "}
+            пользователей
+          </span>
+          <span>→ {connectionHover.node.name} · нажмите для списка</span>
+        </div>
+      )}
+      {connectionDetail &&
+        createPortal(
+          <Modal
+            title={`${connectionDetail.name} → ${connectionDetail.node.name}`}
+            onClose={() => setConnectionDetail(undefined)}
+          >
+            <p className="muted">
+              {connectionDetail.ips.size} наблюдаемых IP ·{" "}
+              {connectionDetail.users.size} пользователей за {period}.
+              Геолокация приблизительная.
+            </p>
+            <Table<Row & { id: string }>
+              key={connectionDetail.id}
+              rows={connectionDetail.rows.map((r) => ({
+                ...r,
+                id: String(r.id),
+              }))}
+              columns={[
+                {
+                  key: "user",
+                  title: "Пользователь",
+                  render: (r) =>
+                    String(
+                      data.users.find(
+                        (u) =>
+                          u.id === r.user ||
+                          u.remna_id === r.user ||
+                          String(u.remna_id) === String(r.user),
+                      )?.name ||
+                        r.user ||
+                        "—",
+                    ),
+                },
+                { key: "ip", title: "Наблюдаемый IP" },
+                { key: "protocol", title: "Протокол" },
+                {
+                  key: "last_seen",
+                  title: "Последняя активность",
+                  render: (r) => datetime(r.last_seen as number),
+                },
+              ]}
+            />
+          </Modal>,
+          document.body,
+        )}
+      {connections && !demo && (
+        <div className="map-observations muted">
+          {liveRegions.length
+            ? `${new Set(liveRegions.flatMap((r) => [...r.ips])).size} IP с геолокацией · ${liveRegions.length} регионов`
+            : !data.geoip?.available
+              ? data.geoip?.update_failed
+                ? "Загрузка базы геолокации временно недоступна. Повторяем автоматически."
+                : "База геолокации загружается. Подключения появятся автоматически."
+              : "Нет подключений с геолокацией для выбранной ноды и периода."}
+          {" · последние "}
+          {data.connections.length} наблюдений · {period}
+        </div>
+      )}
       <div className="map-legend">
         <span>
           <i className="diamond" /> Нода
         </span>
-        {connections && demo && (
+        {connections && (demo || liveRegions.length > 0) && (
           <span>
             <i className="ring" />
             Регион подключения
           </span>
         )}
-        {connections && demo && (
+        {connections && (demo || liveRegions.length > 0) && (
           <span>
             <i className="connection-line" />
             Подключение

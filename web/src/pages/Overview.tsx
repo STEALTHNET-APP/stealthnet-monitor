@@ -30,6 +30,7 @@ import { Chart } from "../components/Chart";
 import { NodeMap } from "../components/NodeMap";
 import { useStore } from "../data/store";
 import { fmt, datetime } from "../data/demo";
+import { connectionRegions, recentConnections } from "../data/geography";
 export function Overview() {
   const { data, demo } = useStore();
   const nav = useNavigate();
@@ -61,7 +62,13 @@ export function Overview() {
           icon={<Users />}
           label="Пользователи онлайн"
           value={hasUsers ? fmt(users) : "—"}
-          note={demo ? "+8,4% за сутки" : hasUsers ? "Remnawave · сумма по нодам" : "Нет данных Remnawave"}
+          note={
+            demo
+              ? "+8,4% за сутки"
+              : hasUsers
+                ? "Remnawave · сумма по нодам"
+                : "Нет данных Remnawave"
+          }
         />
         <Stat
           icon={<Gauge />}
@@ -202,7 +209,7 @@ export function Overview() {
 export function MapPage() {
   const { data, demo, refresh, period, setPeriod } = useStore();
   const [selected, setSelected] = useState(
-    new URLSearchParams(location.search).get("node") || "node-1",
+    new URLSearchParams(location.search).get("node") || "",
   );
   const [q, setQ] = useState("");
   const [mode, setMode] = useState("Подключения");
@@ -214,7 +221,22 @@ export function MapPage() {
       n.name.toLowerCase().includes(q.toLowerCase()) &&
       (status === "all" || n.status === status),
   );
-  const node = nodes.find((n) => n.id === selected) || nodes[0];
+  const node =
+    nodes.find((n) => n.id === selected) ||
+    nodes.find((n) =>
+      data.connections.some(
+        (r) => r.node_id === n.id || (!r.node_id && r.node === n.name),
+      ),
+    ) ||
+    nodes[0];
+  const observations = recentConnections(
+    data.connections,
+    period,
+    data.updated_at,
+    node,
+  );
+  const regions = connectionRegions(observations, nodes);
+  const observedIps = new Set(regions.flatMap((r) => [...r.ips])).size;
   return (
     <>
       <Header
@@ -377,27 +399,51 @@ export function MapPage() {
                         </div>
                       ))}
                     </div>
+                  ) : regions.length ? (
+                    <div className="region-list">
+                      <p className="muted">
+                        Наблюдаемые IP за {period} · приблизительно
+                      </p>
+                      {regions.slice(0, 8).map((r) => (
+                        <div key={r.id}>
+                          <Flag code={r.code} />
+                          <span>
+                            {r.name}
+                            <small className="muted"> · {r.country}</small>
+                          </span>
+                          <Meter
+                            value={
+                              observedIps ? (r.ips.size / observedIps) * 100 : 0
+                            }
+                            color="var(--blue)"
+                          />
+                          <b>{r.ips.size}</b>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <Empty
                       title="Нет геоданных подключений"
-                      text="Добавьте источник журналов и базу GeoIP."
+                      text={
+                        data.geoip?.available
+                          ? "Для этой ноды пока нет наблюдений за выбранный период."
+                          : data.geoip?.update_failed
+                            ? "Не удалось скачать базу геолокации. Панель повторит загрузку автоматически."
+                            : "База геолокации загружается. Данные появятся автоматически."
+                      }
                     />
                   )}
                 </Panel>
               </>
             ) : tab === "Подключения" ? (
               <div className="inspector-list">
-                {data.connections
-                  .filter((r) => r.node === node.name)
-                  .map((r) => (
-                    <Link key={String(r.id)} to="/connections">
-                      <b>{r.ip}</b>
-                      <span>{r.region}</span>
-                    </Link>
-                  ))}
-                {!data.connections.some((r) => r.node === node.name) && (
-                  <Empty />
-                )}
+                {observations.slice(0, 100).map((r) => (
+                  <Link key={String(r.id)} to="/connections">
+                    <b>{r.ip}</b>
+                    <span>{r.region}</span>
+                  </Link>
+                ))}
+                {!observations.length && <Empty />}
               </div>
             ) : (
               <div className="inspector-list">
