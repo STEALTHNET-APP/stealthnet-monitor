@@ -103,17 +103,37 @@ pub async fn page(app: &App, kind: &str, input: &Filter) -> Result<Value, Error>
         uf("name"),
         uf("remna_id")
     );
+    // First reject unrelated JSON text cheaply. Parsing the same large payload
+    // for every searchable field costs seconds on a full Remnawave inventory.
+    // Keep decoded-field matching below; skip this shortcut for strings whose
+    // JSON representation can differ (Unicode, quotes, escapes, control chars),
+    // or queries that can span the spaces joining multiple searchable fields.
+    let raw_safe = !input.q.trim().is_empty()
+        && input.q.is_ascii()
+        && !input
+            .q
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == '"' || c == '\\');
+    let candidate = |alias: &str| {
+        if raw_safe {
+            format!("LOWER({alias}.id || ' ' || {alias}.payload) LIKE $2 ESCAPE '!'")
+        } else {
+            "TRUE".to_owned()
+        }
+    };
     let user_match = format!(
         "{} IN (SELECT id FROM matched_users UNION SELECT remna_id FROM matched_users UNION SELECT name FROM matched_users)",
         rf("user")
     );
     let prefix = format!(
-        "WITH matched_users AS (SELECT u.id, {} AS remna_id, {} AS name FROM records u WHERE u.kind='user' AND $2 <> '%%' AND {user_search}) ",
+        "WITH matched_users AS (SELECT u.id, {} AS remna_id, {} AS name FROM records u WHERE u.kind='user' AND $2 <> '%%' AND {} AND {user_search}) ",
         uf("remna_id"),
-        uf("name")
+        uf("name"),
+        candidate("u")
     );
     let condition = format!(
-        "FROM records r WHERE r.kind=$1 AND ($2='%%' OR LOWER(r.id || ' ' || {search}) LIKE $2 ESCAPE '!' OR {user_match}) AND ($3='' OR $3='all' OR {}=$3 OR {}=$3 OR {}=$3) AND ($4='' OR {} IN ($5,$6,$7))",
+        "FROM records r WHERE r.kind=$1 AND ($2='%%' OR ({} AND LOWER(r.id || ' ' || {search}) LIKE $2 ESCAPE '!') OR {user_match}) AND ($3='' OR $3='all' OR {}=$3 OR {}=$3 OR {}=$3) AND ($4='' OR {} IN ($5,$6,$7))",
+        candidate("r"),
         rf("node"),
         rf("node_id"),
         rf("os"),

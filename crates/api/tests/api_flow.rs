@@ -156,6 +156,69 @@ async fn inventory_search_resolves_names_and_profile_uses_all_saved_records() {
     .await;
     assert_eq!(empty["total"], 0);
 }
+#[tokio::test]
+async fn search_prefilter_preserves_decoded_strings_and_ignores_metadata_only_matches() {
+    let a = app().await;
+    for (name, query) in [
+        ("телефон", "тел"),
+        ("Phone \"A\"", "\"A\""),
+        ("A\\B", "A\\B"),
+        ("line\nbreak", "line\nb"),
+    ] {
+        db::save_record(
+            &a.db,
+            "device",
+            "escaped",
+            &json!({"id":"escaped","device":name,"source":"metadata-only"}),
+            now(),
+        )
+        .await
+        .unwrap();
+        let result = stealthnet_api::inventory::page(
+            &a,
+            "device",
+            &stealthnet_api::inventory::Filter {
+                q: query.into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["total"], 1, "{name}");
+    }
+    let result = stealthnet_api::inventory::page(
+        &a,
+        "device",
+        &stealthnet_api::inventory::Filter {
+            q: "metadata-only".into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["total"], 0);
+    db::save_record(
+        &a.db,
+        "device",
+        "spanning",
+        &json!({"id":"spanning","name":"Alpha","user":"Beta"}),
+        now(),
+    )
+    .await
+    .unwrap();
+    let result = stealthnet_api::inventory::page(
+        &a,
+        "device",
+        &stealthnet_api::inventory::Filter {
+            q: "alpha beta".into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["total"], 1);
+}
+
 async fn app() -> App {
     App {
         db: db::connect("sqlite::memory:").await.unwrap(),

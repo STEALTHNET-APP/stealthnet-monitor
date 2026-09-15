@@ -980,6 +980,20 @@ export function People({
               ))}
             </dl>
             <p className="footnote">Источник: {selected.source}</p>
+            {!isDevices && (
+              <p className="footnote">
+                ASN определяет оператора. Он не подтверждает Wi-Fi, кабель или
+                мобильную сеть конкретного подключения. Предположение о типе
+                оператора показывается только при наличии признаков в источнике.
+              </p>
+            )}
+            {!isDevices && (selected.traffic == null || selected.duration_seconds == null) && (
+              <p className="footnote">
+                В этой записи нет полного замера TCP-канала. Старые записи
+                журнала не содержат длительности и объёма трафика; эти значения
+                доступны для каналов, которые измеряет обновлённый агент.
+              </p>
+            )}
           </Panel>
           <AccountConnections row={selected} />
         </>

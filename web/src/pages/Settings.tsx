@@ -927,7 +927,7 @@ export function Settings() {
               <dl className="details">
                 <div>
                   <dt>Версия</dt>
-                  <dd>0.1.4-dev</dd>
+                  <dd>0.1.5-dev</dd>
                 </div>
                 <div>
                   <dt>Режим</dt>
@@ -1042,7 +1042,7 @@ function Updates() {
           <Monitor size={45} />
           <div>
             <span className="muted">Установленная версия</span>
-            <h2>v0.1.4</h2>
+            <h2>v0.1.5</h2>
             <p>Первая тестовая версия</p>
           </div>
           <ArrowRight size={25} />
