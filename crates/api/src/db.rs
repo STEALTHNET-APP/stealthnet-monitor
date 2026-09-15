@@ -63,7 +63,7 @@ pub async fn connect(url: &str) -> Result<AnyPool> {
     {
         let r = Rule {
             id: "expiry".into(),
-            name: "Окончание аренды сервера".into(),
+            name: "Ежемесячная оплата сервера".into(),
             metric: "expiry".into(),
             threshold: 7.,
             duration: 0,
@@ -74,6 +74,17 @@ pub async fn connect(url: &str) -> Result<AnyPool> {
             severity: "warning".into(),
         };
         save_record(&pool, "rule", "expiry", &serde_json::to_value(r)?, now()).await?;
+    }
+    // Rename only the shipped default; retain custom names and thresholds.
+    if let Some(row) = sqlx::query("SELECT payload FROM records WHERE kind='rule' AND id='expiry'")
+        .fetch_optional(&pool)
+        .await?
+    {
+        let mut rule: Value = serde_json::from_str(&row.get::<String, _>("payload"))?;
+        if rule["name"] == "Окончание аренды сервера" {
+            rule["name"] = json!("Ежемесячная оплата сервера");
+            save_record(&pool, "rule", "expiry", &rule, now()).await?;
+        }
     }
     crate::inventory::indexes(&pool).await?;
     Ok(pool)
@@ -149,6 +160,11 @@ pub async fn nodes(pool: &AnyPool) -> Result<Vec<Value>> {
                 }
             }
         }
+        p["next_payment_at"] = json!(
+            p["expires_at"]
+                .as_i64()
+                .and_then(|date| crate::billing::next_payment(date, now()))
+        );
     }
     Ok(out)
 }

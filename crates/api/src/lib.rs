@@ -1,4 +1,5 @@
 pub mod alerts;
+pub mod billing;
 pub mod db;
 pub mod geoip;
 pub mod inventory;

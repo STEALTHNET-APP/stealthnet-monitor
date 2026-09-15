@@ -144,10 +144,13 @@ async fn evaluate_expiry(app: &App, node: &Value, rule: &Rule) -> anyhow::Result
         .await?
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or(Value::Null);
-    let Some(expires) = node["expires_at"].as_i64() else {
+    let current_time = now();
+    let anchor = node["expires_at"].as_i64();
+    let Some(expires) = anchor.and_then(|date| crate::billing::next_payment(date, current_time))
+    else {
         if old["stage"].is_number() {
             let incident_id = format!("expiry:{id}:{}", rule.id);
-            db::save_record(&app.db, "incident", &incident_id, &json!({"id":incident_id,"node":node["name"],"node_id":id,"title":"Дата аренды удалена","status":"resolved","started":now(),"value":"Напоминание отключено","source":"Дата аренды"}), now()).await?;
+            db::save_record(&app.db, "incident", &incident_id, &json!({"id":incident_id,"node":node["name"],"node_id":id,"title":"Дата оплаты удалена","status":"resolved","started":now(),"value":"Напоминание отключено","source":"График оплаты"}), now()).await?;
         }
         if !old.is_null() {
             db::set_setting(&app.db, &key, "null").await?;
@@ -155,56 +158,62 @@ async fn evaluate_expiry(app: &App, node: &Value, rule: &Rule) -> anyhow::Result
         return Ok(());
     };
     let previous = old["expires_at"].as_i64();
-    let days = (expires - now()) as f64 / 86400000.;
-    let stage = [0., 1., 3., rule.threshold]
-        .into_iter()
-        .filter(|v| *v <= rule.threshold && days <= *v)
-        .min_by(f64::total_cmp);
+    let days = expires.div_euclid(86400000) - current_time.div_euclid(86400000);
+    let stage = crate::billing::reminder_stage(expires, current_time, rule.threshold);
     let name = node["name"].as_str().unwrap_or(id);
     let provider = node["provider"]
         .as_str()
         .filter(|s| !s.is_empty())
         .unwrap_or("Не указан");
     let date = chrono::DateTime::from_timestamp_millis(expires)
-        .map(|d| d.format("%d.%m.%Y %H:%M UTC").to_string())
+        .map(|d| d.format("%d.%m.%Y (UTC)").to_string())
         .unwrap_or_default();
-    let renewed = previous.is_some_and(|v| expires > v);
-    if renewed && rule.recovery {
-        let title = format!("Сервер продлён: {name}");
+    // A new calendar month is not evidence of a payment. Only an explicit
+    // schedule edit can produce the legacy `renewal` notification category.
+    let date_changed = old["anchor"].as_i64().is_some_and(|v| Some(v) != anchor);
+    if date_changed && rule.recovery && stage.is_none() {
+        let title = format!("Дата оплаты изменена: {name}");
         telegram::queue(
             app,
             "renewal",
             &title,
-            &format!("🟢 Сервер продлён\n\n{name}\nХостер: {provider}\nНовая дата: {date}"),
+            &format!("📅 Дата оплаты изменена\n\n{name}\nХостер: {provider}\nСледующий платёж: {date}\nПовтор: каждый месяц"),
             Some(id),
             false,
         )
         .await?;
     }
     if let Some(stage) = stage {
-        if old["stage"].as_f64() != Some(stage) || previous != Some(expires) {
-            let title = if stage == 0. {
-                format!("Аренда истекла: {name}")
+        if old["stage"].as_i64() != Some(stage) || previous != Some(expires) {
+            let title = if stage == 0 {
+                format!("Сегодня оплата сервера: {name}")
             } else {
-                format!("Скоро истекает аренда: {name}")
+                format!("Скоро оплата сервера: {name}")
             };
+            let cost = node["monthly_cost"]
+                .as_f64()
+                .map(|v| {
+                    format!(
+                        "\nСумма: {v:.2} {}",
+                        node["currency"].as_str().unwrap_or("USD")
+                    )
+                })
+                .unwrap_or_default();
             let text = format!(
-                "{} {title}\n\nСервер: {name}\nХостер: {provider}\nОкончание: {date}\nОсталось: {} дн.\nИсточник: дата аренды в настройках сервера",
-                if stage == 0. { "🔴" } else { "🟡" },
-                days.ceil().max(0.)
+                "📅 {title}\n\nСервер: {name}\nХостер: {provider}\nДата оплаты: {date}{cost}\nОсталось: {days} дн.\nПовтор: каждый месяц\nИсточник: график оплаты в настройках сервера"
             );
             telegram::queue(app, "expiry", &title, &text, Some(id), false).await?;
             let incident_id = format!("expiry:{id}:{}", rule.id);
-            db::save_record(&app.db,"incident",&incident_id,&json!({"id":incident_id,"node":name,"node_id":id,"title":title,"status":if stage==0.{"critical"}else{"warning"},"started":now(),"value":format!("{} дн.",days.ceil().max(0.)),"source":"Дата аренды","expires_at":expires,"provider":provider}),now()).await?;
+            db::save_record(&app.db,"incident",&incident_id,&json!({"id":incident_id,"node":name,"node_id":id,"title":title,"status":"warning","started":now(),"value":format!("{days} дн."),"source":"График оплаты","next_payment_at":expires,"provider":provider}),now()).await?;
         }
     } else if old["stage"].is_number() {
         let incident_id = format!("expiry:{id}:{}", rule.id);
-        db::save_record(&app.db,"incident",&incident_id,&json!({"id":incident_id,"node":name,"node_id":id,"title":"Сервер продлён","status":"resolved","started":now(),"value":date,"source":"Дата аренды","provider":provider}),now()).await?;
+        db::save_record(&app.db,"incident",&incident_id,&json!({"id":incident_id,"node":name,"node_id":id,"title":"Следующий платёж запланирован","status":"resolved","started":now(),"value":date,"source":"График оплаты","provider":provider}),now()).await?;
     }
     db::set_setting(
         &app.db,
         &key,
-        &json!({"expires_at":expires,"stage":stage}).to_string(),
+        &json!({"anchor":anchor,"expires_at":expires,"stage":stage}).to_string(),
     )
     .await?;
     Ok(())

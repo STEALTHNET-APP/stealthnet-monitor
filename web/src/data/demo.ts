@@ -9,6 +9,7 @@ export type Node = {
   location_source?: string;
   provider?: string;
   expires_at?: number | null;
+  next_payment_at?: number | null;
   monthly_cost?: number | null;
   currency?: string;
   id: string;

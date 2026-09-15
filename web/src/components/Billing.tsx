@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { Node, fmt } from "../data/demo";
 import { useStore } from "../data/store";
 import { Panel } from "./ui";
+import { nextPaymentDate, paymentDays } from "../data/billing";
 export type BillingData = {
   provider: string;
   expires_at: number | null;
@@ -18,7 +19,7 @@ export type BillingData = {
 };
 export function Expiry({ value }: { value?: number | null }) {
   if (!value) return <span className="muted">Не указана</span>;
-  const days = Math.ceil((value - Date.now()) / 86400000);
+  const days = paymentDays(value);
   return (
     <span
       className={"expiry " + (days <= 0 ? "red" : days <= 7 ? "amber" : "")}
@@ -26,7 +27,7 @@ export function Expiry({ value }: { value?: number | null }) {
       <CalendarClock size={14} />
       <span>
         {new Date(value).toLocaleDateString("ru-RU", { timeZone: "UTC" })}
-        <small>{days <= 0 ? "Истекла" : `${days} дн. осталось`}</small>
+        <small>{days === 0 ? "Оплата сегодня" : days < 0 ? "Дата прошла" : `Через ${days} дн.`}</small>
       </span>
     </span>
   );
@@ -65,7 +66,7 @@ export function BillingFields({
           </datalist>
         </label>
         <label>
-          Оплачен до (дата, UTC)
+          Дата оплаты (ежемесячно, UTC)
           <input
             type="date"
             min="2020-01-01"
@@ -84,6 +85,10 @@ export function BillingFields({
               })
             }
           />
+          <small className="muted">
+            {value.expires_at ? `Каждый месяц, ${new Date(value.expires_at).getUTCDate()}-го числа. Следующий платёж: ${new Date(nextPaymentDate(value.expires_at)).toLocaleDateString("ru-RU", { timeZone: "UTC" })}.` : "Выберите дату первого платежа — напоминания будут повторяться каждый месяц."}
+            {" "}Если такого числа нет в месяце, используется последний день.
+          </small>
         </label>
       </div>
       <div className="grid two">
@@ -144,7 +149,7 @@ export function BillingEditor({ node }: { node: Node }) {
     <div className="split wide-left">
       <Panel
         title="Хостер и аренда"
-        sub="Управляйте оплатой и сроком действия сервера"
+        sub="Хостер, стоимость и ежемесячный график оплаты"
       >
         <form onSubmit={submit}>
           <BillingFields value={form} onChange={setForm} />
@@ -158,14 +163,15 @@ export function BillingEditor({ node }: { node: Node }) {
         <div className="billing-notification">
           <Send className="blue" size={29} />
           <div>
-            <b>За 7, 3 и 1 день</b>
-            <p>А также при истечении и продлении сервера.</p>
+            <b>Каждый месяц: за 7, 3 и 1 день</b>
+            <p>И в день оплаты. Повтор включается автоматически после сохранения даты.</p>
           </div>
         </div>
         <div className="notice-box">
           <p>
-            Периоды задаются в правиле «Окончание аренды сервера». После
-            изменения даты напоминания пересчитываются.
+            Периоды задаются в правиле «Ежемесячная оплата сервера».
+            Напоминания приходят в подключённый Telegram. Панель ведёт график,
+            подтверждение оплаты от хостера не получает.
           </p>
         </div>
         <Link className="button full" to="/alerts">
@@ -183,9 +189,9 @@ export function BillingSummary({ node }: { node: Node }) {
         <dd>{node.provider || "Не указан"}</dd>
       </div>
       <div>
-        <dt>Оплачен до</dt>
+        <dt>Следующая оплата</dt>
         <dd>
-          <Expiry value={node.expires_at} />
+          <Expiry value={node.next_payment_at ?? (node.expires_at ? nextPaymentDate(node.expires_at) : null)} />
         </dd>
       </div>
       <div>

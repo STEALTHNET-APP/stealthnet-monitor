@@ -731,7 +731,7 @@ async fn threshold_opens_one_incident_and_recovers() {
 }
 
 #[tokio::test]
-async fn rental_reminders_are_deduplicated_and_renewal_is_reported() {
+async fn monthly_payment_reminders_are_deduplicated_and_schedule_changes_are_reported() {
     let app = app().await;
     stealthnet_api::telegram::save(
         &app,
@@ -764,10 +764,12 @@ async fn rental_reminders_are_deduplicated_and_renewal_is_reported() {
     alerts::evaluate(&app).await.unwrap();
     let rows = stealthnet_api::telegram::history(&app).await.unwrap();
     assert_eq!(rows.len(), 3);
-    assert!(
-        rows.iter()
-            .any(|r| r["title"].as_str().unwrap().contains("продлён"))
-    );
+    assert!(rows.iter().any(|r| {
+        r["title"]
+            .as_str()
+            .unwrap()
+            .contains("Дата оплаты изменена")
+    }));
     let incidents = db::records(&app.db, "incident", 10).await.unwrap();
     assert_eq!(incidents[0]["status"], "resolved");
     db::set_setting(
@@ -785,7 +787,7 @@ async fn rental_reminders_are_deduplicated_and_renewal_is_reported() {
     );
     assert_eq!(
         db::records(&app.db, "incident", 10).await.unwrap()[0]["status"],
-        "critical"
+        "warning"
     );
     db::set_setting(
         &app.db,
@@ -802,5 +804,40 @@ async fn rental_reminders_are_deduplicated_and_renewal_is_reported() {
     assert_eq!(
         stealthnet_api::telegram::history(&app).await.unwrap().len(),
         4
+    );
+    // Persisted state from the preceding cycle must not suppress this month's
+    // same reminder stage or claim a payment/renewal on automatic rollover.
+    db::set_setting(
+        &app.db,
+        "billing:rental-node",
+        &json!({"provider":"Test hoster","expires_at":expiry,"currency":"EUR"}).to_string(),
+    )
+    .await
+    .unwrap();
+    db::set_setting(
+        &app.db,
+        "expiry-state:expiry:rental-node",
+        &json!({"anchor":expiry,"expires_at":expiry-31*86400000,"stage":7}).to_string(),
+    )
+    .await
+    .unwrap();
+    alerts::evaluate(&app).await.unwrap();
+    alerts::evaluate(&app).await.unwrap();
+    let rows = stealthnet_api::telegram::history(&app).await.unwrap();
+    assert_eq!(rows.len(), 5);
+    assert_eq!(
+        rows.iter()
+            .filter(|r| r["title"]
+                .as_str()
+                .unwrap()
+                .contains("Дата оплаты изменена"))
+            .count(),
+        1
+    );
+    let node = db::nodes(&app.db).await.unwrap().remove(0);
+    assert_eq!(node["expires_at"], expiry);
+    assert_eq!(
+        node["next_payment_at"],
+        stealthnet_api::billing::next_payment(expiry, now()).unwrap()
     );
 }

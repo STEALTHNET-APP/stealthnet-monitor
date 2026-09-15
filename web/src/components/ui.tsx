@@ -552,9 +552,9 @@ export const nodeColumns: Column<Node>[] = [
   },
   {
     key: "expires_at",
-    title: "Оплачен до",
-    sort: (r) => r.expires_at || Infinity,
-    render: (r) => <Expiry value={r.expires_at} />,
+    title: "Следующая оплата",
+    sort: (r) => r.next_payment_at || r.expires_at || Infinity,
+    render: (r) => <Expiry value={r.next_payment_at ?? r.expires_at} />,
   },
   {
     key: "status",

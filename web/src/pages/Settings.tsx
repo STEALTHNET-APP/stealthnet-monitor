@@ -51,7 +51,7 @@ const deliveryColumns = [
   },
 ];
 const metricNames: Record<string, string> = {
-  expiry: "Аренда истекает, дней",
+  expiry: "До оплаты сервера, дней",
   offline: "Нет связи с агентом, секунд",
   cpu: "CPU, %",
   ram: "RAM, %",
@@ -201,7 +201,7 @@ export function Alerts() {
                               : ["complaint", "detection"].includes(r.metric)
                                 ? "При поступлении события"
                                 : r.metric === "expiry"
-                                  ? `За ${[r.threshold, 3, 1].filter((v, i, a) => v <= r.threshold && a.indexOf(v) === i).join(", ")} дн. и при истечении`
+                                  ? `За ${[r.threshold, 3, 1].filter((v, i, a) => v <= r.threshold && a.indexOf(v) === i).join(", ")} дн. и в день оплаты`
                                   : `Выше ${r.threshold} · ${r.duration} с`}
                           </span>
                           <span>
@@ -326,14 +326,14 @@ export function Alerts() {
                 {rule.metric === "expiry" && (
                   <p className="muted">
                     По одному сообщению на каждый срок: выбранный порог, 3 дня,
-                    1 день и истечение. Этапы выше выбранного порога
+                    1 день и день оплаты. Повторяется ежемесячно. Этапы выше выбранного порога
                     пропускаются.
                   </p>
                 )}
                 <div className="spread">
                   <span>
                     {rule.metric === "expiry"
-                      ? "Сообщать о продлении"
+                      ? "Сообщать о переносе даты"
                       : "Сообщать о восстановлении"}
                   </span>
                   <Switch
@@ -380,8 +380,8 @@ export function Alerts() {
   );
 }
 const events = [
-  ["expiry", "Истечение аренды"],
-  ["renewal", "Продление сервера"],
+  ["expiry", "Ежемесячная оплата сервера"],
+  ["renewal", "Изменение даты оплаты"],
   ["offline", "Потеря связи с агентом"],
   ["cpu", "Перегрузка CPU"],
   ["ram", "Перегрузка RAM"],
@@ -927,7 +927,7 @@ export function Settings() {
               <dl className="details">
                 <div>
                   <dt>Версия</dt>
-                  <dd>0.1.3-dev</dd>
+                  <dd>0.1.4-dev</dd>
                 </div>
                 <div>
                   <dt>Режим</dt>
@@ -1042,7 +1042,7 @@ function Updates() {
           <Monitor size={45} />
           <div>
             <span className="muted">Установленная версия</span>
-            <h2>v0.1.3</h2>
+            <h2>v0.1.4</h2>
             <p>Первая тестовая версия</p>
           </div>
           <ArrowRight size={25} />
