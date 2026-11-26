@@ -299,6 +299,7 @@ export function demoSnapshot(): Snapshot {
       region: ["Польша", "Германия", "Украина", "Франция"][i % 4],
       node: baseNodes[i % 18].name,
       protocol: "VLESS",
+      last_seen: now - i * 61000,
       duration: `${14 + i} мин`,
       traffic: Math.round(125 + i * 27),
       status: i % 11 ? "online" : "closed",

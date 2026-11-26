@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
             .user_agent("stealthnet-monitor")
             .timeout(std::time::Duration::from_secs(15))
             .build()?,
-        public_url,
+        public_url: parsed.origin().ascii_serialization(),
         password_hash: Arc::new(
             Argon2::default()
                 .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))

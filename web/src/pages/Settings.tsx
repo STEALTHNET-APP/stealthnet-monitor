@@ -38,9 +38,11 @@ import {
   CopyText,
   Empty,
   Stat,
+  SearchBox,
 } from "../components/ui";
 import { useStore, api } from "../data/store";
 import { Rule, Row, datetime, regions } from "../data/demo";
+import { countries, countryName, matchesCountry } from "../data/countries";
 const deliveryColumns = [
   { key: "time", title: "Время", render: (r: Row) => datetime(r.time) },
   { key: "title", title: "Событие" },
@@ -327,8 +329,8 @@ export function Alerts() {
                 {rule.metric === "expiry" && (
                   <p className="muted">
                     По одному сообщению на каждый срок: выбранный порог, 3 дня,
-                    1 день и день оплаты. Повторяется ежемесячно. Этапы выше выбранного порога
-                    пропускаются.
+                    1 день и день оплаты. Повторяется ежемесячно. Этапы выше
+                    выбранного порога пропускаются.
                   </p>
                 )}
                 <div className="spread">
@@ -1050,6 +1052,17 @@ export function AddNode() {
   const [region, setRegion] = useState(
     params.get("region") || (demo ? "de" : "xx"),
   );
+  const [countryQuery, setCountryQuery] = useState("");
+  const countryOptions = countries.filter(
+    ({ code, name }) =>
+      matchesCountry(countryQuery, code, name) ||
+      regions.some(
+        (r) =>
+          r[2] === code &&
+          r[0].toLowerCase().includes(countryQuery.trim().toLowerCase()),
+      ),
+  );
+  const selectedCountry = countries.find(({ code }) => code === region);
   const [nodeSecret, setNodeSecret] = useState("");
   const [nodeImage, setNodeImage] = useState("");
   const [imageLoading, setImageLoading] = useState(false);
@@ -1119,8 +1132,8 @@ export function AddNode() {
       } else {
         const r = regions.find((r) => r[2] === region) || [
           "Не указан",
-          "Не указан",
-          "xx",
+          countryName(region),
+          selectedCountry?.code || "xx",
           0,
           0,
         ];
@@ -1223,8 +1236,8 @@ export function AddNode() {
                 <dd>{name}</dd>
               </div>
               <div>
-                <dt>Регион</dt>
-                <dd>{regions.find((r) => r[2] === region)?.[1]}</dd>
+                <dt>Страна</dt>
+                <dd>{countryName(region)}</dd>
               </div>
               <div>
                 <dt>Сценарий</dt>
@@ -1329,20 +1342,37 @@ export function AddNode() {
                   сетевого интерфейса.
                 </small>
               </label>
-              <label>
-                Регион
-                <select
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                >
-                  <option value="xx">Не указан — без маркера на карте</option>
-                  {regions.map((r) => (
-                    <option value={r[2]} key={r[2]}>
-                      {r[1]} · {r[0]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="country-picker">
+                <SearchBox
+                  value={countryQuery}
+                  onChange={setCountryQuery}
+                  placeholder="Поиск страны по названию или коду"
+                />
+                <label>
+                  Страна
+                  <select
+                    aria-label="Страна"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                  >
+                    <option value="xx">Не указана</option>
+                    {selectedCountry &&
+                      !countryOptions.includes(selectedCountry) && (
+                        <option value={selectedCountry.code}>
+                          {selectedCountry.name}
+                        </option>
+                      )}
+                    {countryOptions.map(({ code, name }) => (
+                      <option value={code} key={code}>
+                        {name} ({code.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                  {countryQuery.trim() && !countryOptions.length && (
+                    <small role="status">Совпадений не найдено</small>
+                  )}
+                </label>
+              </div>
               {mode === "clean" && (
                 <>
                   <label>

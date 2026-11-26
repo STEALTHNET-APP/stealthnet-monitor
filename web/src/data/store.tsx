@@ -4,9 +4,18 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
 import { Snapshot, demoSnapshot, emptySnapshot, Rule, Row } from "./demo";
+class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 export async function api<T = any>(
   path: string,
   options: RequestInit = {},
@@ -17,7 +26,7 @@ export async function api<T = any>(
   });
   if (!r.ok) {
     const error = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
-    throw new Error(error.error || `HTTP ${r.status}`);
+    throw new ApiError(error.error || `HTTP ${r.status}`, r.status);
   }
   return r.status === 204 ? (undefined as T) : await r.json();
 }
@@ -26,6 +35,7 @@ type Store = {
   demo: boolean;
   loading: boolean;
   error: string;
+  needsLogin: boolean;
   period: string;
   setPeriod: (v: string) => void;
   setDemo: (v: boolean) => void;
@@ -43,10 +53,12 @@ export function Provider({ children }: { children: ReactNode }) {
       (import.meta.env.DEV && localStorage.getItem("sn-mode") !== "live"),
   );
   const [data, setData] = useState(demo ? demoSnapshot() : emptySnapshot);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!demo);
   const [error, setError] = useState("");
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [period, setPeriod] = useState("24 ч");
   const [notice, setNotice] = useState("");
+  const request = useRef<AbortController | null>(null);
   const toast = useCallback((s: string) => setNotice(s), []);
   useEffect(() => {
     if (notice) {
@@ -59,26 +71,47 @@ export function Provider({ children }: { children: ReactNode }) {
       setData((d) => ({ ...d, updated_at: Date.now() }));
       return;
     }
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setLoading(true);
     try {
-      setData(await api<Snapshot>("/snapshot"));
+      const snapshot = await api<Snapshot>("/snapshot", {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setData(snapshot);
       setError("");
+      setNeedsLogin(false);
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError((e as Error).message);
+      const unauthorized = e instanceof ApiError && e.status === 401;
+      setNeedsLogin(unauthorized);
+      if (unauthorized) setData(emptySnapshot);
     } finally {
-      setLoading(false);
+      if (request.current === controller) {
+        request.current = null;
+        setLoading(false);
+      }
     }
   }, [demo]);
   useEffect(() => {
+    setError("");
+    setNeedsLogin(false);
     if (demo) {
       setData(demoSnapshot());
-      setError("");
+      setLoading(false);
     } else {
       setData(emptySnapshot);
       void refresh();
     }
     const id = setInterval(() => void refresh(), 15000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      request.current?.abort();
+      request.current = null;
+    };
   }, [demo, refresh]);
   function setDemo(v: boolean) {
     localStorage.setItem("sn-mode", v ? "demo" : "live");
@@ -126,6 +159,7 @@ export function Provider({ children }: { children: ReactNode }) {
         demo,
         loading,
         error,
+        needsLogin,
         period,
         setPeriod,
         setDemo,

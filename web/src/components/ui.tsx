@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useStore } from "../data/store";
 import { fmt, Node, Row } from "../data/demo";
+import { formatSpeed } from "../data/speed";
 export function Header({
   title,
   sub,
@@ -34,11 +35,12 @@ export function Header({
       </div>
       <div className="heading-actions">
         {period && (
-          <div className="segmented">
-            {["1 ч", "6 ч", "24 ч", "7 д"].map((p) => (
+          <div className="segmented" role="group" aria-label="Период">
+            {["15 мин", "1 ч", "6 ч", "24 ч", "7 д"].map((p) => (
               <button
                 key={p}
                 className={s.period === p ? "active" : ""}
+                aria-pressed={s.period === p}
                 onClick={() => s.setPeriod(p)}
               >
                 {p}
@@ -97,11 +99,32 @@ export function Tabs({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="tabs" role="tablist">
+    <div
+      className="tabs"
+      role="tablist"
+      onKeyDown={(event) => {
+        const current = items.indexOf(value);
+        const next =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? items.length - 1
+              : event.key === "ArrowLeft"
+                ? (current - 1 + items.length) % items.length
+                : event.key === "ArrowRight"
+                  ? (current + 1) % items.length
+                  : -1;
+        if (next < 0) return;
+        event.preventDefault();
+        onChange(items[next]);
+        event.currentTarget.querySelectorAll("button")[next]?.focus();
+      }}
+    >
       {items.map((x) => (
         <button
           role="tab"
           aria-selected={value === x}
+          tabIndex={value === x ? 0 : -1}
           key={x}
           className={value === x ? "active" : ""}
           onClick={() => onChange(x)}
@@ -231,8 +254,8 @@ export function SearchBox({
   placeholder?: string;
 }) {
   return (
-    <label className="searchbox">
-      <Search size={19} />
+    <div className="searchbox">
+      <Search size={19} aria-hidden="true" />
       <input
         aria-label={placeholder}
         placeholder={placeholder}
@@ -240,11 +263,18 @@ export function SearchBox({
         onChange={(e) => onChange(e.target.value)}
       />
       {value && (
-        <button aria-label="Очистить поиск" onClick={() => onChange("")}>
+        <button
+          type="button"
+          aria-label="Очистить поиск"
+          onClick={(event) => {
+            event.currentTarget.parentElement?.querySelector("input")?.focus();
+            onChange("");
+          }}
+        >
           <X size={15} />
         </button>
       )}
-    </label>
+    </div>
   );
 }
 export function Empty({
@@ -344,12 +374,23 @@ export function Table<T extends { id: string | number }>({
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key}>
+                <th
+                  key={col.key}
+                  scope="col"
+                  aria-sort={
+                    sort === col.key && !remote
+                      ? desc
+                        ? "descending"
+                        : "ascending"
+                      : undefined
+                  }
+                >
                   {col.sort && !remote ? (
                     <button
                       onClick={() => {
                         setSort(col.key);
                         setDesc(sort === col.key ? !desc : false);
+                        setPage(1);
                       }}
                     >
                       {col.title}
@@ -428,12 +469,23 @@ export function Table<T extends { id: string | number }>({
               <button
                 key={p}
                 className={p === current ? "active" : ""}
+                aria-current={p === current ? "page" : undefined}
                 onClick={() => setPage(p)}
               >
                 {p}
               </button>
             ))}
-            {last > 5 && <span>… {last}</span>}
+            {last > 5 && current < last - 2 && (
+              <>
+                {current < last - 3 && <span aria-hidden="true">…</span>}
+                <button
+                  aria-label={`Последняя страница, ${last}`}
+                  onClick={() => setPage(last)}
+                >
+                  {last}
+                </button>
+              </>
+            )}
             <button
               aria-label="Следующая страница"
               disabled={current === last}
@@ -543,7 +595,7 @@ export const nodeColumns: Column<Node>[] = [
       </>
     ),
   },
-  { key: "country", title: "Регион", sort: (r) => r.country },
+  { key: "country", title: "Страна", sort: (r) => r.country },
   {
     key: "provider",
     title: "Хостер",
@@ -577,14 +629,10 @@ export const nodeColumns: Column<Node>[] = [
     key: "traffic",
     title: "Трафик",
     sort: (r) => (r.rx || 0) + (r.tx || 0),
-    render: (r) => (
-      <>
-        <Spark seed={r.cpu || 1} />
-        <span>
-          {r.rx == null ? "—" : fmt(r.rx + (r.tx || 0), 2) + " Гбит/с"}
-        </span>
-      </>
-    ),
+    render: (r) =>
+      formatSpeed(
+        r.rx == null && r.tx == null ? null : (r.rx ?? 0) + (r.tx ?? 0),
+      ),
   },
   {
     key: "users",

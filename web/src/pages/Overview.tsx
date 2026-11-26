@@ -9,7 +9,7 @@ import {
   Cpu,
   MemoryStick,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import {
   Header,
@@ -32,6 +32,8 @@ import { useStore } from "../data/store";
 import { fmt, datetime } from "../data/demo";
 import { useTraffic, volume } from "../data/inventory";
 import { connectionRegions, recentConnections } from "../data/geography";
+import { matchesCountry } from "../data/countries";
+import { formatSpeed } from "../data/speed";
 export function Overview() {
   const { data, demo } = useStore();
   const nav = useNavigate();
@@ -58,7 +60,14 @@ export function Overview() {
               {online} <em>/ {data.nodes.length}</em>
             </>
           }
-          note={`${data.nodes.length - online} требуют внимания`}
+          note={
+            data.nodes.length
+              ? data.nodes.length === online
+                ? "Все ноды доступны"
+                : `${data.nodes.length - online} требуют внимания`
+              : "Добавьте первую ноду"
+          }
+          spark={false}
         />
         <Stat
           icon={<Users />}
@@ -75,11 +84,9 @@ export function Overview() {
         <Stat
           icon={<Gauge />}
           label="Скорость сети"
-          value={
-            <>
-              {fmt(speed, 1)} <small>Гбит/с</small>
-            </>
-          }
+          value={formatSpeed(
+            data.nodes.some((n) => n.rx != null || n.tx != null) ? speed : null,
+          )}
         />
         <Stat
           icon={<Database />}
@@ -90,9 +97,14 @@ export function Overview() {
         <Stat
           icon={<TriangleAlert />}
           label="Инциденты"
-          value={data.incidents.filter((r) => r.status !== "resolved").length}
-          note={`${data.incidents.filter((r) => r.status === "critical").length} критических`}
-          color="var(--red)"
+          value={activeIncidents.length}
+          note={
+            activeIncidents.length
+              ? `${activeIncidents.filter((r) => r.status === "critical").length} критических`
+              : "Нет активных инцидентов"
+          }
+          color={activeIncidents.length ? "var(--amber)" : undefined}
+          spark={false}
         />
       </div>
       <div className="overview-top">
@@ -141,7 +153,11 @@ export function Overview() {
             ) : (
               <Empty
                 title="Нет активных инцидентов"
-                text="Состояние подключённых агентов в норме."
+                text={
+                  data.nodes.length
+                    ? "Здесь появятся новые предупреждения."
+                    : "Добавьте ноду, чтобы начать мониторинг."
+                }
               />
             )}
           </Panel>
@@ -211,17 +227,19 @@ export function Overview() {
 }
 export function MapPage() {
   const { data, demo, refresh, period, setPeriod } = useStore();
-  const [selected, setSelected] = useState(
-    new URLSearchParams(location.search).get("node") || "",
-  );
+  const [params, setParams] = useSearchParams();
+  const selected = params.get("node") || "";
   const [q, setQ] = useState("");
   const [mode, setMode] = useState("Подключения");
-  const [world, setWorld] = useState(false);
+  const [world, setWorld] = useState(true);
   const [status, setStatus] = useState("all");
   const [tab, setTab] = useState("Обзор");
   const nodes = data.nodes.filter(
     (n) =>
-      n.name.toLowerCase().includes(q.toLowerCase()) &&
+      ([n.name, n.city, n.ip].some((value) =>
+        value.toLowerCase().includes(q.trim().toLowerCase()),
+      ) ||
+        matchesCountry(q, n.code, n.country)) &&
       (status === "all" || n.status === status),
   );
   const node =
@@ -240,6 +258,7 @@ export function MapPage() {
   );
   const regions = connectionRegions(observations, nodes);
   const observedIps = new Set(regions.flatMap((r) => [...r.ips])).size;
+  const online = nodes.filter((n) => n.status === "online").length;
   return (
     <>
       <Header
@@ -288,19 +307,18 @@ export function MapPage() {
       <div className="map-layout">
         <div>
           <div className="map-summary panel">
-            <b>{data.nodes.length} нод</b>
-            <Badge
-              status="online"
-              label={`${data.nodes.filter((n) => n.status === "online").length} доступны`}
-            />
-            <Badge
-              status="warning"
-              label={`${data.nodes.filter((n) => n.status !== "online").length} требуют внимания`}
-            />
+            <b>{nodes.length} нод</b>
+            <Badge status="online" label={`${online} доступны`} />
+            {nodes.length > online && (
+              <Badge
+                status="warning"
+                label={`${nodes.length - online} требуют внимания`}
+              />
+            )}
             <span>
               <Users size={19} />
-              {data.nodes.some((n) => n.users != null)
-                ? fmt(data.nodes.reduce((s, n) => s + (n.users || 0), 0))
+              {nodes.some((n) => n.users != null)
+                ? fmt(nodes.reduce((s, n) => s + (n.users || 0), 0))
                 : "—"}{" "}
               онлайн
             </span>
@@ -310,15 +328,17 @@ export function MapPage() {
               <SearchBox
                 value={q}
                 onChange={setQ}
-                placeholder="Найти ноду на карте"
+                placeholder="Нода, город, IP или страна"
               />
             </div>
             <NodeMap
               nodes={nodes}
               selected={node}
               onSelect={(n) => {
-                setSelected(n.id);
-                history.replaceState(null, "", "/map?node=" + n.id);
+                setParams(
+                  { node: n.id },
+                  { replace: true, preventScrollReset: true },
+                );
               }}
               world={world}
               connections={mode === "Подключения"}
@@ -356,18 +376,22 @@ export function MapPage() {
                   />
                   <Stat
                     label="Трафик"
-                    value={`${fmt(node.rx == null ? null : node.rx + (node.tx || 0), 1)} Гбит/с`}
+                    value={formatSpeed(
+                      node.rx == null && node.tx == null
+                        ? null
+                        : (node.rx ?? 0) + (node.tx ?? 0),
+                    )}
                     icon={<Gauge />}
                   />
                   <Stat
                     label="CPU"
-                    value={`${fmt(node.cpu)}%`}
+                    value={node.cpu == null ? "—" : `${fmt(node.cpu)}%`}
                     icon={<Cpu />}
                     spark={false}
                   />
                   <Stat
                     label="RAM"
-                    value={`${fmt(node.ram)}%`}
+                    value={node.ram == null ? "—" : `${fmt(node.ram)}%`}
                     icon={<MemoryStick />}
                     spark={false}
                   />
@@ -441,7 +465,10 @@ export function MapPage() {
             ) : tab === "Подключения" ? (
               <div className="inspector-list">
                 {observations.slice(0, 100).map((r) => (
-                  <Link key={String(r.id)} to="/connections">
+                  <Link
+                    key={String(r.id)}
+                    to={"/connections?q=" + encodeURIComponent(String(r.ip))}
+                  >
                     <b>{r.ip}</b>
                     <span>{r.region}</span>
                   </Link>
@@ -453,7 +480,13 @@ export function MapPage() {
                 {data.incidents
                   .filter((r) => r.node === node.name)
                   .map((r) => (
-                    <Link key={String(r.id)} to="/incidents">
+                    <Link
+                      key={String(r.id)}
+                      to={
+                        "/incidents?selected=" +
+                        encodeURIComponent(String(r.id))
+                      }
+                    >
                       <Badge status={String(r.status)} />
                       <span>{r.title}</span>
                     </Link>
@@ -474,7 +507,14 @@ export function MapPage() {
           </Panel>
         ) : (
           <Panel>
-            <Empty title="Ноды не найдены" action={<AddServer />} />
+            {data.nodes.length ? (
+              <Empty
+                title="Ноды не найдены"
+                text="Измените запрос или статус."
+              />
+            ) : (
+              <Empty title="Нет нод" action={<AddServer />} />
+            )}
           </Panel>
         )}
       </div>

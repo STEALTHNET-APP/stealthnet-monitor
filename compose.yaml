@@ -24,7 +24,7 @@ services:
       DATABASE_URL: postgres://stealthnet:${POSTGRES_PASSWORD}@db:5432/stealthnet
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
-      PUBLIC_URL: https://${DOMAIN:?Set DOMAIN}
+      PUBLIC_URL: https://${DOMAIN:?Set DOMAIN}:${HTTPS_PORT:-443}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       BIND_ADDR: 0.0.0.0:8787
       DATA_DIR: /tmp/stealthnet
@@ -53,10 +53,11 @@ services:
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
     ports:
       - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -38,11 +38,13 @@ const incidentColumns: Column<Row & { id: string }>[] = [
 ];
 export function Incidents() {
   const { data, demo, toast, refresh } = useStore();
-  const [params] = useSearchParams();
-  const [selected, setSelected] = useState(
-    params.get("selected") || String(data.incidents[0]?.id || ""),
-  );
-  const [tab, setTab] = useState("Активные");
+  const [params, setParams] = useSearchParams();
+  const selected = params.get("selected");
+  const linked = data.incidents.find((r) => String(r.id) === selected);
+  const tab =
+    params.get("tab") === "history" || linked?.status === "resolved"
+      ? "История"
+      : "Активные";
   const [severity, setSeverity] = useState("all");
   const [ack, setAck] = useState<string[]>([]);
   const rows = data.incidents.filter(
@@ -50,9 +52,19 @@ export function Incidents() {
       (tab === "Активные"
         ? r.status !== "resolved"
         : r.status === "resolved") &&
-      (severity === "all" || r.status === severity),
+      (tab === "История" || severity === "all" || r.status === severity),
   );
-  const incident = rows.find((r) => r.id === selected) || rows[0];
+  const incident = rows.find((r) => String(r.id) === selected) || rows[0];
+  const incidentNode = data.nodes.find((n) =>
+    incident?.node_id ? n.id === incident.node_id : n.name === incident?.node,
+  );
+  const metric =
+    data.rules.find((rule) => rule.id === incident?.rule_id)?.metric ??
+    (demo && String(incident?.title).includes("Диск")
+      ? "disk"
+      : demo && String(incident?.title).includes("задержка")
+        ? "latency"
+        : null);
   async function acknowledge() {
     if (!incident) return;
     try {
@@ -74,18 +86,28 @@ export function Incidents() {
         sub="Проблемы и история восстановления"
         period
         action={
-          <select
-            aria-label="Важность"
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value)}
-          >
-            <option value="all">Все уровни</option>
-            <option value="critical">Критические</option>
-            <option value="warning">Предупреждения</option>
-          </select>
+          tab === "Активные" && (
+            <select
+              aria-label="Важность"
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value)}
+            >
+              <option value="all">Все уровни</option>
+              <option value="critical">Критические</option>
+              <option value="warning">Предупреждения</option>
+            </select>
+          )
         }
       />
-      <Tabs items={["Активные", "История"]} value={tab} onChange={setTab} />
+      <Tabs
+        items={["Активные", "История"]}
+        value={tab}
+        onChange={(value) =>
+          setParams(value === "История" ? { tab: "history" } : {}, {
+            replace: true,
+          })
+        }
+      />
       <div className="stats four">
         <Stat
           icon={<TriangleAlert />}
@@ -116,41 +138,41 @@ export function Incidents() {
       </div>
       <div className="split event-split">
         <div className="stack">
-          <Panel title="Лента инцидентов">
-            <div className="incident-timeline">
-              {rows.map((r, i) => (
-                <button
-                  key={String(r.id)}
-                  onClick={() => setSelected(String(r.id))}
-                >
-                  <span>{r.node}</span>
-                  <div className="timeline-axis">
-                    <i
-                      style={{
-                        left: `${50 + i * 7}%`,
-                        width: `${7 + i * 5}%`,
-                        background:
-                          r.status === "critical"
-                            ? "var(--red)"
-                            : "var(--amber)",
-                      }}
-                    />
-                  </div>
-                  <time>{datetime(r.started)}</time>
-                </button>
-              ))}
-            </div>
-            {!rows.length && <Empty title="Инцидентов нет" />}
-          </Panel>
           <Panel
-            title={`Список инцидентов (${rows.length})`}
+            title={
+              tab === "История" ? "Завершённые инциденты" : "Активные инциденты"
+            }
             className="grow-panel"
           >
-            <Table
-              rows={rows as (Row & { id: string })[]}
-              columns={incidentColumns}
-              onRow={(r) => setSelected(r.id)}
-            />
+            {rows.length ? (
+              <Table
+                rows={rows as (Row & { id: string })[]}
+                columns={incidentColumns}
+                onRow={(r) =>
+                  setParams(
+                    (current) => {
+                      const next = new URLSearchParams(current);
+                      next.set("selected", r.id);
+                      return next;
+                    },
+                    { replace: true },
+                  )
+                }
+              />
+            ) : (
+              <Empty
+                title={
+                  severity !== "all" && tab === "Активные"
+                    ? "Совпадений нет"
+                    : "Инцидентов нет"
+                }
+                text={
+                  tab === "История"
+                    ? "Здесь появятся завершённые инциденты."
+                    : "Здесь появятся активные инциденты."
+                }
+              />
+            )}
           </Panel>
         </div>
         {incident ? (
@@ -170,18 +192,25 @@ export function Incidents() {
                 <dt>Начало</dt>
                 <dd>{datetime(incident.started)}</dd>
               </div>
+              {incident.resolved_at && (
+                <div>
+                  <dt>Завершение</dt>
+                  <dd>{datetime(incident.resolved_at)}</dd>
+                </div>
+              )}
               <div>
                 <dt>Источник</dt>
                 <dd>{incident.source}</dd>
               </div>
             </dl>
-            <h3>Динамика показателя</h3>
-            <Chart
-              kind={
-                String(incident.title).includes("Диск") ? "disk" : "latency"
-              }
-              height={190}
-            />
+            {incidentNode &&
+              metric &&
+              ["cpu", "ram", "disk", "traffic", "latency"].includes(metric) && (
+                <>
+                  <h3>Динамика показателя</h3>
+                  <Chart kind={metric} nodeId={incidentNode.id} height={190} />
+                </>
+              )}
             <div className="notice-box">
               <TriangleAlert size={22} />
               <p>
@@ -190,37 +219,31 @@ export function Incidents() {
               </p>
             </div>
             <div className="button-row">
-              <Link
-                className="button"
-                to={
-                  "/nodes/" +
-                  data.nodes.find((n) => n.name === incident.node)?.id
-                }
-              >
-                Открыть ноду
-              </Link>
-              <button
-                className="button primary"
-                disabled={
-                  ack.includes(String(incident.id)) ||
-                  incident.acknowledged === true
-                }
-                onClick={() => void acknowledge()}
-              >
-                {ack.includes(String(incident.id)) || incident.acknowledged
-                  ? "В работе"
-                  : "Принять в работу"}
-              </button>
+              {incidentNode && (
+                <Link
+                  className="button"
+                  to={"/nodes/" + encodeURIComponent(incidentNode.id)}
+                >
+                  Открыть ноду
+                </Link>
+              )}
+              {tab === "Активные" && (
+                <button
+                  className="button primary"
+                  disabled={
+                    ack.includes(String(incident.id)) ||
+                    incident.acknowledged === true
+                  }
+                  onClick={() => void acknowledge()}
+                >
+                  {ack.includes(String(incident.id)) || incident.acknowledged
+                    ? "В работе"
+                    : "Принять в работу"}
+                </button>
+              )}
             </div>
           </Panel>
-        ) : (
-          <Panel>
-            <Empty
-              title="Всё спокойно"
-              text="Здесь появятся подробности выбранной проблемы."
-            />
-          </Panel>
-        )}
+        ) : null}
       </div>
     </>
   );

@@ -12,6 +12,16 @@ import {
   type ConnectionRegion,
 } from "../data/geography";
 import { useStore } from "../data/store";
+
+function hasNodeLocation(node: Node) {
+  return (
+    node.code !== "xx" &&
+    Number.isFinite(node.lat) &&
+    Number.isFinite(node.lon) &&
+    (node.lat !== 0 || node.lon !== 0)
+  );
+}
+
 export function NodeMap({
   nodes,
   selected,
@@ -86,7 +96,7 @@ export function NodeMap({
   };
   const groups = new Map<string, { nodes: Node[]; x: number; y: number }>();
   for (const n of nodes) {
-    if (n.code === "xx") continue;
+    if (!hasNodeLocation(n)) continue;
     const p = projection([n.lon, n.lat]);
     if (!p) continue;
     const cell = world ? 58 : 36;
@@ -222,6 +232,7 @@ export function NodeMap({
           {connections &&
             demo &&
             focus &&
+            hasNodeLocation(focus) &&
             regions.map((r, i) => {
               const a = projection([focus.lon, focus.lat])!,
                 b = projection([r.lon, r.lat])!;
@@ -367,10 +378,9 @@ export function NodeMap({
             !demo &&
             visibleRegions.map((region, i) => {
               const b = projection([region.lon, region.lat]);
-              const a =
-                region.node.code !== "xx"
-                  ? projection([region.node.lon, region.node.lat])
-                  : null;
+              const a = hasNodeLocation(region.node)
+                ? projection([region.node.lon, region.node.lat])
+                : null;
               if (!b || !b.every(Number.isFinite)) return null;
               const label = `${region.name}, ${region.country}: ${region.ips.size} IP, ${region.users.size} пользователей → ${region.node.name}`;
               return (

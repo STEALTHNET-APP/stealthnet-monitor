@@ -101,7 +101,8 @@ export function useTraffic(hours: number) {
   useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    api<TrafficTotals>(`/traffic-summary?hours=${hours}`, {
+    const period = hours === 0.25 ? "minutes=15" : `hours=${hours}`;
+    api<TrafficTotals>(`/traffic-summary?${period}`, {
       signal: controller.signal,
     })
       .then(setTotals)

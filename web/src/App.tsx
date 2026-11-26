@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Routes,
   Route,
@@ -10,7 +10,7 @@ import {
 import {
   Activity,
   LayoutGrid,
-  Map,
+  Map as MapIcon,
   Server,
   ChartNoAxesColumn,
   Users,
@@ -21,11 +21,9 @@ import {
   Bell,
   Settings as SettingsIcon,
   Search,
-  ChevronDown,
   ChevronRight,
   Menu,
   X,
-  Package,
   LogIn,
   CheckCircle,
 } from "lucide-react";
@@ -42,9 +40,10 @@ import {
 import { Incidents, Torrents, ComplaintDetail } from "./pages/Events";
 import { Alerts, Settings, AddNode } from "./pages/Settings";
 import { Empty } from "./components/ui";
+import { matchesCountry, countryName } from "./data/countries";
 const nav = [
   { url: "/", text: "Обзор", icon: LayoutGrid },
-  { url: "/map", text: "Карта", icon: Map },
+  { url: "/map", text: "Карта", icon: MapIcon },
   { url: "/nodes", text: "Серверы и ноды", icon: Server },
   { url: "/monitoring", text: "Мониторинг", icon: Activity },
   { url: "/traffic", text: "Трафик", icon: ChartNoAxesColumn },
@@ -60,24 +59,27 @@ const nav = [
   { url: "/torrents", text: "Торренты", icon: FileText },
 ];
 function Shell() {
-  const { data, demo, setDemo, error, loading, refresh, notice } = useStore();
+  const { data, demo, setDemo, error, needsLogin, loading, refresh, notice } =
+    useStore();
   const [mobile, setMobile] = useState(false);
   const [query, setQuery] = useState("");
+  const searchTerm = query.trim();
   const [searchOpen, setSearchOpen] = useState(false);
+  const menu = useRef<HTMLButtonElement>(null);
+  const closeMenu = useRef<HTMLButtonElement>(null);
   const [searchUsers, setSearchUsers] = useState<
     { id: string; name: string }[]
   >([]);
   const [searchStatus, setSearchStatus] = useState("");
   useEffect(() => {
-    if (demo || !query.trim()) {
-      setSearchUsers([]);
-      return;
-    }
+    setSearchUsers([]);
+    setSearchStatus("");
+    if (demo || !searchOpen || !searchTerm || needsLogin) return;
     const controller = new AbortController();
     setSearchStatus("Поиск…");
     const timer = setTimeout(() => {
       api<{ rows: { id: string; name: string }[] }>(
-        "/inventory/user?limit=8&q=" + encodeURIComponent(query),
+        "/inventory/user?limit=8&q=" + encodeURIComponent(searchTerm),
         { signal: controller.signal },
       )
         .then((v) => {
@@ -95,7 +97,19 @@ function Shell() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, demo]);
+  }, [searchTerm, demo, searchOpen, needsLogin]);
+  useEffect(() => {
+    if (!mobile) return;
+    closeMenu.current?.focus();
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobile(false);
+        menu.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [mobile]);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -104,7 +118,7 @@ function Shell() {
   useEffect(() => {
     setMobile(false);
     setSearchOpen(false);
-    document.querySelector("main")?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
   }, [location.pathname]);
   const current =
     nav.find((n) =>
@@ -119,25 +133,47 @@ function Shell() {
         : location.pathname === "/add-server"
           ? "Добавить сервер"
           : "Подробности");
-  const results = [
-    ...data.nodes.map((n) => ({
-      id: n.id,
-      name: n.name + " · " + n.ip,
-      to: "/nodes/" + n.id,
-      type: "Нода",
-    })),
-    ...(demo ? data.users : searchUsers).map((u) => ({
-      id: String(u.id),
-      name: String(u.name),
-      to: "/users/" + u.id,
-      type: "Пользователь",
-    })),
-  ]
-    .filter(
-      (r) =>
-        query.length > 0 && r.name.toLowerCase().includes(query.toLowerCase()),
-    )
-    .slice(0, 8);
+  const activeIncidents = data.incidents.filter(
+    (r) => r.status !== "resolved",
+  ).length;
+  const nodeCountries = new Map(
+    data.nodes.filter((n) => n.code !== "xx").map((n) => [n.code, n.country]),
+  );
+  const results = searchTerm
+    ? [
+        ...data.nodes
+          .filter((n) =>
+            `${n.name} ${n.ip}`
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase()),
+          )
+          .map((n) => ({
+            id: n.id,
+            name: n.name + " · " + n.ip,
+            to: "/nodes/" + n.id,
+            type: "Нода",
+          })),
+        ...[...nodeCountries]
+          .filter(([code, name]) => matchesCountry(searchTerm, code, name))
+          .map(([code]) => ({
+            id: code,
+            name: countryName(code),
+            to: "/nodes?country=" + encodeURIComponent(code),
+            type: "Страна",
+          })),
+        ...(demo
+          ? data.users.filter((u) =>
+              String(u.name).toLowerCase().includes(searchTerm.toLowerCase()),
+            )
+          : searchUsers
+        ).map((u) => ({
+          id: String(u.id),
+          name: String(u.name),
+          to: "/users/" + u.id,
+          type: "Пользователь",
+        })),
+      ].slice(0, 8)
+    : [];
   async function login(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -161,9 +197,15 @@ function Shell() {
         К содержимому
       </a>
       {mobile && (
-        <div className="sidebar-scrim" onClick={() => setMobile(false)} />
+        <div
+          className="sidebar-scrim"
+          onClick={() => {
+            setMobile(false);
+            menu.current?.focus();
+          }}
+        />
       )}
-      <aside className={"sidebar " + (mobile ? "open" : "")}>
+      <aside id="sidebar" className={"sidebar " + (mobile ? "open" : "")}>
         <Link className="brand" to="/">
           <Activity />
           <span>
@@ -171,11 +213,17 @@ function Shell() {
             <small>Remnawave</small>
           </span>
         </Link>
-        <div className="project-picker">
-          <Package size={16} />
-          <span>Основной проект</span>
-          <ChevronDown size={15} />
-        </div>
+        <button
+          ref={closeMenu}
+          className="sidebar-close"
+          aria-label="Закрыть меню"
+          onClick={() => {
+            setMobile(false);
+            menu.current?.focus();
+          }}
+        >
+          <X size={20} />
+        </button>
         <nav aria-label="Основная навигация">
           {nav.map((n) => (
             <div key={n.url}>
@@ -183,12 +231,12 @@ function Shell() {
               <NavLink end={n.url === "/"} to={n.url}>
                 <n.icon size={19} />
                 <span>{n.text}</span>
-                {n.url === "/incidents" && data.incidents.length > 0 && (
-                  <b className="count">
-                    {
-                      data.incidents.filter((r) => r.status !== "resolved")
-                        .length
-                    }
+                {n.url === "/incidents" && activeIncidents > 0 && (
+                  <b
+                    className="count"
+                    aria-label={`Активных инцидентов: ${activeIncidents}`}
+                  >
+                    {activeIncidents}
                   </b>
                 )}
               </NavLink>
@@ -216,8 +264,11 @@ function Shell() {
       <div className="workspace">
         <header className="topbar">
           <button
+            ref={menu}
             className="mobile-menu"
             aria-label="Открыть меню"
+            aria-controls="sidebar"
+            aria-expanded={mobile}
             onClick={() => setMobile(true)}
           >
             <Menu />
@@ -227,8 +278,17 @@ function Shell() {
             <span>/</span>
             <b>{current}</b>
           </div>
-          <div className="global-search">
-            <Search size={18} />
+          <div
+            className="global-search"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                setSearchOpen(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setSearchOpen(false);
+            }}
+          >
+            <Search size={18} aria-hidden="true" />
             <input
               aria-label="Глобальный поиск"
               value={query}
@@ -238,25 +298,34 @@ function Shell() {
               }}
               onFocus={() => setSearchOpen(true)}
               onKeyDown={(e) => {
-                if (e.key === "Escape") setSearchOpen(false);
-                if (e.key === "Enter" && results[0]) navigate(results[0].to);
+                if (e.key === "Enter" && searchOpen && results[0]) {
+                  navigate(results[0].to);
+                  setSearchOpen(false);
+                }
               }}
-              placeholder="Поиск ноды, пользователя, IP"
+              placeholder="Нода, страна, пользователь или IP"
             />
-            {searchOpen && query && (
+            {searchOpen && searchTerm && (
               <div className="search-results">
                 {results.map((r) => (
-                  <Link key={r.type + r.id} to={r.to}>
+                  <Link
+                    key={r.type + r.id}
+                    to={r.to}
+                    onClick={() => setSearchOpen(false)}
+                  >
                     <span>{r.name}</span>
                     <small>{r.type}</small>
                   </Link>
                 ))}
                 {searchStatus && !demo ? (
-                  <p>{searchStatus}</p>
+                  <p role="status">{searchStatus}</p>
                 ) : (
                   !results.length && <p>Совпадений не найдено</p>
                 )}
-                <Link to={"/connections?q=" + encodeURIComponent(query)}>
+                <Link
+                  to={"/connections?q=" + encodeURIComponent(searchTerm)}
+                  onClick={() => setSearchOpen(false)}
+                >
                   Искать среди подключений →
                 </Link>
               </div>
@@ -271,15 +340,19 @@ function Shell() {
           </button>
           <Link
             className="notification-bell"
-            aria-label="Инциденты"
+            aria-label={
+              activeIncidents
+                ? `Активных инцидентов: ${activeIncidents}`
+                : "Инциденты"
+            }
             to="/incidents"
           >
             <Bell size={22} />
-            {data.incidents.length > 0 && <i />}
+            {activeIncidents > 0 && <i />}
           </Link>
         </header>
         <main id="main" tabIndex={-1}>
-          {!demo && error ? (
+          {!demo && needsLogin ? (
             <div className="login-wrap">
               <div className="panel login-panel">
                 <Activity className="mint" size={42} />
@@ -303,7 +376,6 @@ function Shell() {
                       {loginError}
                     </p>
                   )}
-                  <p className="tiny muted">{error}</p>
                   <button className="button primary full" disabled={busy}>
                     <LogIn size={18} />
                     {busy ? "Вход…" : "Войти"}
@@ -321,39 +393,60 @@ function Shell() {
               <div />
             </div>
           ) : (
-            <Routes>
-              <Route path="/" element={<Overview />} />
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/nodes" element={<Nodes />} />
-              <Route path="/nodes/:id" element={<NodeDetail />} />
-              <Route path="/monitoring" element={<Monitoring />} />
-              <Route path="/traffic" element={<Traffic />} />
-              <Route path="/users" element={<People />} />
-              <Route path="/users/:id" element={<UserDetail />} />
-              <Route
-                path="/connections"
-                element={<People key="connections" kind="connections" />}
-              />
-              <Route
-                path="/devices"
-                element={<People key="devices" kind="devices" />}
-              />
-              <Route path="/incidents" element={<Incidents />} />
-              <Route path="/torrents" element={<Torrents />} />
-              <Route path="/complaints/:id" element={<ComplaintDetail />} />
-              <Route path="/alerts" element={<Alerts />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/add-server" element={<AddNode />} />
-              <Route
-                path="*"
-                element={
-                  <Empty
-                    title="Страница не найдена"
-                    action={<Link to="/">На главную</Link>}
-                  />
-                }
-              />
-            </Routes>
+            <>
+              {!demo && error && (
+                <div className="panel connection-warning" role="status">
+                  <div>
+                    <b>Не удалось обновить данные</b>
+                    <p className="muted">
+                      {data.updated_at
+                        ? "Показаны последние полученные данные."
+                        : error}
+                    </p>
+                  </div>
+                  <button
+                    className="button"
+                    disabled={loading}
+                    onClick={() => void refresh()}
+                  >
+                    Повторить
+                  </button>
+                </div>
+              )}
+              <Routes>
+                <Route path="/" element={<Overview />} />
+                <Route path="/map" element={<MapPage />} />
+                <Route path="/nodes" element={<Nodes />} />
+                <Route path="/nodes/:id" element={<NodeDetail />} />
+                <Route path="/monitoring" element={<Monitoring />} />
+                <Route path="/traffic" element={<Traffic />} />
+                <Route path="/users" element={<People />} />
+                <Route path="/users/:id" element={<UserDetail />} />
+                <Route
+                  path="/connections"
+                  element={<People key="connections" kind="connections" />}
+                />
+                <Route
+                  path="/devices"
+                  element={<People key="devices" kind="devices" />}
+                />
+                <Route path="/incidents" element={<Incidents />} />
+                <Route path="/torrents" element={<Torrents />} />
+                <Route path="/complaints/:id" element={<ComplaintDetail />} />
+                <Route path="/alerts" element={<Alerts />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/add-server" element={<AddNode />} />
+                <Route
+                  path="*"
+                  element={
+                    <Empty
+                      title="Страница не найдена"
+                      action={<Link to="/">На главную</Link>}
+                    />
+                  }
+                />
+              </Routes>
+            </>
           )}
           <footer className="app-footer">
             <span>

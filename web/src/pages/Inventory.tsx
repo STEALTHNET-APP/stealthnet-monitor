@@ -51,6 +51,8 @@ import {
   InventoryKind,
 } from "../data/inventory";
 import { fmt, datetime, Row } from "../data/demo";
+import { countryName, matchesCountry } from "../data/countries";
+import { formatSpeed } from "../data/speed";
 export function exportCsv(name: string, rows: Record<string, unknown>[]) {
   if (!rows.length) return;
   const keys = Object.keys(rows[0]);
@@ -80,31 +82,59 @@ export function exportCsv(name: string, rows: Record<string, unknown>[]) {
 export function Nodes() {
   const { data, refresh, loading } = useStore();
   const [query, setQuery] = useState("");
-  const [region, setRegion] = useState("all");
+  const [params, setParams] = useSearchParams();
+  const region = params.get("country") || "all";
+  const setRegion = (code: string) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (code === "all") next.delete("country");
+      else next.set("country", code);
+      return next;
+    });
   const [provider, setProvider] = useState("all");
   const [group, setGroup] = useState("all");
   const [status, setStatus] = useState("all");
   const [tab, setTab] = useState("Ноды");
   const nav = useNavigate();
-  const nodes = data.nodes.filter(
+  const countryNames = [
+    ...new Map(data.nodes.map((n) => [n.code, countryName(n.code)])),
+  ].sort((a, b) => a[1].localeCompare(b[1], "ru"));
+  const countryTab = tab === "Страны";
+  const scoped = data.nodes.filter(
     (n) =>
-      (n.name + " " + n.ip + " " + (n.provider || ""))
-        .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (region === "all" || n.country === region) &&
+      (countryTab || region === "all" || n.code === region) &&
       (provider === "all" || n.provider === provider) &&
       (group === "all" || n.group === group) &&
       (status === "all" || n.status === status),
+  );
+  const nodes = scoped.filter(
+    (n) =>
+      matchesCountry(query, n.code, n.country) ||
+      (!countryTab &&
+        [n.name, n.ip, n.provider || ""]
+          .join(" ")
+          .toLowerCase()
+          .includes(query.trim().toLowerCase())),
+  );
+  const nodeCountByCountry = new Map<string, number>();
+  for (const node of nodes) {
+    nodeCountByCountry.set(
+      node.code,
+      (nodeCountByCountry.get(node.code) ?? 0) + 1,
+    );
+  }
+  const shownCountries = countryNames.filter(([code]) =>
+    nodeCountByCountry.has(code),
   );
   return (
     <>
       <Header
         title="Серверы и ноды"
-        sub={`${data.nodes.length} нод в ${new Set(data.nodes.map((n) => n.country)).size} регионах`}
+        sub="Состояние нод, география и хостинг"
         action={<AddServer />}
       />
       <Tabs
-        items={["Ноды", "Серверы", "Группы"]}
+        items={["Ноды", "Серверы", "Страны", "Группы"]}
         value={tab}
         onChange={setTab}
       />
@@ -131,18 +161,26 @@ export function Nodes() {
         <SearchBox
           value={query}
           onChange={setQuery}
-          placeholder="Название, IP или хостер"
+          placeholder={
+            countryTab
+              ? "Название или код страны"
+              : "Название, IP, страна или хостер"
+          }
         />
-        <select
-          aria-label="Регион"
-          value={region}
-          onChange={(e) => setRegion(e.target.value)}
-        >
-          <option value="all">Все регионы</option>
-          {[...new Set(data.nodes.map((n) => n.country))].map((r) => (
-            <option key={r}>{r}</option>
-          ))}
-        </select>
+        {!countryTab && (
+          <select
+            aria-label="Страна"
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+          >
+            <option value="all">Все страны</option>
+            {countryNames.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           aria-label="Статус"
           value={status}
@@ -180,7 +218,32 @@ export function Nodes() {
         </button>
       </div>
       <Panel>
-        {tab === "Группы" ? (
+        {countryTab ? (
+          shownCountries.length ? (
+            <div className="country-grid">
+              {shownCountries.map(([code, name]) => (
+                <button
+                  className="country-card"
+                  key={code}
+                  onClick={() => {
+                    setQuery("");
+                    setRegion(code);
+                    setTab("Ноды");
+                  }}
+                >
+                  <Flag code={code} />
+                  <span>{name}</span>
+                  <small>{fmt(nodeCountByCountry.get(code))} нод</small>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="Страны не найдены"
+              text="Измените запрос или фильтры."
+            />
+          )
+        ) : tab === "Группы" ? (
           <div className="group-grid">
             {[...new Set(nodes.map((n) => n.group))].map((g) => (
               <button
@@ -200,7 +263,9 @@ export function Nodes() {
           </div>
         ) : (
           <Table
+            key={`${tab}:${query}:${region}:${status}:${provider}:${group}`}
             rows={nodes}
+            emptyText={data.nodes.length ? "Ничего не найдено" : undefined}
             columns={
               tab === "Серверы"
                 ? [
@@ -389,19 +454,23 @@ export function Monitoring() {
 export function Traffic() {
   const { data, demo, period } = useStore();
   const [tab, setTab] = useState("Динамика");
+  const [countryQuery, setCountryQuery] = useState("");
   const factor =
-    period === "1 ч"
-      ? 1 / 24
-      : period === "6 ч"
-        ? 0.25
-        : period === "7 д"
-          ? 7
-          : 1;
-  const totals = useTraffic(Math.round(factor * 24));
+    period === "15 мин"
+      ? 1 / 96
+      : period === "1 ч"
+        ? 1 / 24
+        : period === "6 ч"
+          ? 0.25
+          : period === "7 д"
+            ? 7
+            : 1;
+  const totals = useTraffic(factor * 24);
   const countries = new Map<string, { code: string; bytes: number }>();
+  const nodesById = new Map(data.nodes.map((node) => [node.id, node]));
   for (const r of totals?.nodes || []) {
-    const node = data.nodes.find((n) => n.id === r.id);
-    const name = node?.country || "Не определён";
+    const node = nodesById.get(r.id);
+    const name = countryName(node?.code || "xx");
     const current = countries.get(name) || {
       code: node?.code || "xx",
       bytes: 0,
@@ -409,6 +478,17 @@ export function Traffic() {
     current.bytes += r.rx_bytes + r.tx_bytes;
     countries.set(name, current);
   }
+  const countryTraffic = demo
+    ? ([
+        ["Германия", { code: "de", bytes: 38 }],
+        ["Нидерланды", { code: "nl", bytes: 27 }],
+        ["Финляндия", { code: "fi", bytes: 18 }],
+        ["Другие страны", { code: "xx", bytes: 17 }],
+      ] as [string, { code: string; bytes: number }][])
+    : [...countries].sort((a, b) => b[1].bytes - a[1].bytes);
+  const shownCountries = countryTraffic.filter(([name, row]) =>
+    matchesCountry(countryQuery, row.code, name),
+  );
   const inbound = totals?.total_bytes
     ? Math.round((totals.rx_bytes / totals.total_bytes) * 100)
     : 0;
@@ -421,6 +501,7 @@ export function Traffic() {
         action={
           <button
             className="button primary"
+            disabled={!data.nodes.some((n) => n.rx != null || n.tx != null)}
             onClick={() =>
               exportCsv(
                 "traffic",
@@ -433,7 +514,7 @@ export function Traffic() {
             }
           >
             <Download size={18} />
-            Экспорт
+            Скорости CSV
           </button>
         }
       />
@@ -457,11 +538,18 @@ export function Traffic() {
               label={String(name)}
               value={
                 demo
-                  ? `${fmt(Number(v) * (i === 3 ? 1 : factor), 1)} ${i === 3 ? "Гбит/с" : "ТБ"}`
+                  ? i === 3
+                    ? formatSpeed(Number(v))
+                    : `${fmt(Number(v) * factor, 2)} ТБ`
                   : i === 3
-                    ? totals?.nodes.length
-                      ? `${fmt(Math.max(...totals.nodes.map((n) => n.peak_gbps)), 2)} Гбит/с`
-                      : "—"
+                    ? formatSpeed(
+                        totals?.nodes.length
+                          ? totals.nodes.reduce(
+                              (peak, n) => Math.max(peak, n.peak_gbps),
+                              0,
+                            )
+                          : null,
+                      )
                     : volume(
                         i === 0
                           ? totals?.total_bytes
@@ -480,17 +568,18 @@ export function Traffic() {
           <Panel title="Динамика трафика">
             <Chart height={295} />
           </Panel>
-          <Panel title="Распределение по регионам">
-            <div className="region-list roomy">
-              {(demo
-                ? ([
-                    ["Германия", { code: "de", bytes: 38 }],
-                    ["Нидерланды", { code: "nl", bytes: 27 }],
-                    ["Финляндия", { code: "fi", bytes: 18 }],
-                    ["Другие", { code: "xx", bytes: 17 }],
-                  ] as [string, { code: string; bytes: number }][])
-                : [...countries].sort((a, b) => b[1].bytes - a[1].bytes)
-              ).map(([name, r]) => (
+          <Panel
+            title="Трафик по странам"
+            sub="Доля по местоположению нод"
+            className="country-traffic"
+          >
+            <SearchBox
+              value={countryQuery}
+              onChange={setCountryQuery}
+              placeholder="Найти страну"
+            />
+            <div className="region-list roomy country-results">
+              {shownCountries.map(([name, r]) => (
                 <div key={name}>
                   <Flag code={r.code} />
                   <span>{name}</span>
@@ -506,22 +595,28 @@ export function Traffic() {
                 </div>
               ))}
             </div>
+            {!shownCountries.length && (
+              <p className="muted">
+                {countryTraffic.length
+                  ? "Совпадений не найдено"
+                  : "За этот период нет замеров по странам"}
+              </p>
+            )}
             <div className="divider" />
             <h3>Соотношение входящего и исходящего</h3>
-            <div className="traffic-ratio">
-              <i style={{ width: demo ? "65%" : `${inbound}%` }} />
-            </div>
+            {(demo || !!totals?.total_bytes) && (
+              <div className="traffic-ratio" aria-hidden="true">
+                <i style={{ width: demo ? "65%" : `${inbound}%` }} />
+              </div>
+            )}
             <div className="spread">
               <span className="mint">
-                Входящий {demo ? "65%" : totals ? `${inbound}%` : "—"}
+                Входящий{" "}
+                {demo ? "65%" : totals?.total_bytes ? `${inbound}%` : "—"}
               </span>
               <span className="blue">
                 Исходящий{" "}
-                {demo
-                  ? "35%"
-                  : totals
-                    ? `${totals.total_bytes ? 100 - inbound : 0}%`
-                    : "—"}
+                {demo ? "35%" : totals?.total_bytes ? `${100 - inbound}%` : "—"}
               </span>
             </div>
           </Panel>
@@ -800,6 +895,8 @@ export function People({
   const nav = useNavigate();
   const [params] = useSearchParams();
   const [q, setQ] = useState(params.get("q") || "");
+  const linkedQuery = params.get("q");
+  useEffect(() => setQ(linkedQuery || ""), [linkedQuery]);
   const [tab, setTab] = useState("Все");
   const [selected, setSelected] = useState<Row>();
   const [filter, setFilter] = useState("all");
@@ -987,13 +1084,16 @@ export function People({
                 оператора показывается только при наличии признаков в источнике.
               </p>
             )}
-            {!isDevices && (selected.traffic == null || selected.duration_seconds == null) && (
-              <p className="footnote">
-                В этой записи нет полного замера TCP-канала. Старые записи
-                журнала не содержат длительности и объёма трафика; эти значения
-                доступны для каналов, которые измеряет обновлённый агент.
-              </p>
-            )}
+            {!isDevices &&
+              (selected.traffic == null ||
+                selected.duration_seconds == null) && (
+                <p className="footnote">
+                  В этой записи нет полного замера TCP-канала. Старые записи
+                  журнала не содержат длительности и объёма трафика; эти
+                  значения доступны для каналов, которые измеряет обновлённый
+                  агент.
+                </p>
+              )}
           </Panel>
           <AccountConnections row={selected} />
         </>
@@ -1087,7 +1187,11 @@ export function NodeDetail() {
             />
             <Stat
               label="Трафик"
-              value={`${fmt(node.rx == null ? null : node.rx + (node.tx || 0), 1)} Гбит/с`}
+              value={formatSpeed(
+                node.rx == null && node.tx == null
+                  ? null
+                  : (node.rx ?? 0) + (node.tx ?? 0),
+              )}
               icon={<Gauge />}
             />
             <Stat
